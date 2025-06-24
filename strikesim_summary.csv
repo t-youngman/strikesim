@@ -1,0 +1,2 @@
+start_date,duration_days,final_striking_workers,final_working_workers,final_employer_balance,final_union_balance,average_morale,outcome,total_concessions,total_strike_pay,total_dues_collected
+2025-01-01T00:00:00,21,0,50,396650.0,95270.0,0.12526486617737292,strike_collapsed,0.0,4930.0,200.0

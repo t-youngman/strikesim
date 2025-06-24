@@ -1,0 +1,273 @@
+\documentclass[a4paper]{article}
+
+%% Language and font encodings
+\usepackage[english]{babel}
+\usepackage[T1]{fontenc}
+
+%% Sets page size and margins
+\usepackage[a4paper,top=3cm,bottom=2cm,left=3cm,right=3cm,marginparwidth=1.75cm]{geometry}
+
+%% Useful packages
+\usepackage{amsmath}
+\usepackage{graphicx}
+\usepackage[colorinlistoftodos]{todonotes}
+\usepackage[colorlinks=true, allcolors=blue]{hyperref}
+
+\title{StrikeSim: how does union structure affect strike growth, success and failure?}
+\author{Marianne Reddan, Andrew Sieben, Tom Youngman}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+This is a model to help unions decide whether or not to call a strike. \footnote{Acknowledgements: thank you so much to all the wonderful organisers and participants of the Santa Fe Institute Complex Systems Summer School 2025. Particularly helpful input was received from Izabel Aguiar, Justin Weltz, Katie O'Neill, Will Thompson, Yang Chen, Brandon Grandison, Suzanne Kern and Sam Dies.}
+\end{abstract}
+
+\section{Modelling approach}
+
+StrikeSim  generates random networks representing the internal structures of unions and workplaces. Nodes represents people and edges represent interactions. Along these networks flows hope and fear affecting workers' willingness to participate in industrial action. The model also tracks monetary flows including wages, strike pay and employer revenue. Over time the combination of the level of morale and workers' financial position affects whether the strike grows or shrinks, and whether the employer cedes to demand.
+
+The model is designed so that union leaders can run the model themselves, without having to grant researchers access to sensitive data. The model is initialised with basic information about the target workplace and union structures. The model then generates a prediction of the development of the strike over the following months, without unions needing to share sensitive information that could jeopardise their organising efforts.
+
+To develop and test the model, we will input information about the initial conditions of past strikes. Some of this information comes from academic case studies and some of this information comes from newspaper articles, press releases and other publicly available information. We will test the model's ability to predict the evolution of these known strikes in order to test and validate the model's  predictive capabilities. 
+
+\section{Simulation Timeline}
+
+The model period begins when industrial action is called. Each month, unions, employers and workers set their strategies. Each day, workers participate in the strike or in the labour force.
+
+At the beginning of each month there is a review phase:
+
+\begin{enumerate}
+    \item Payments: wages paid, strike fund claims
+    \item Employer acts: retaliation or concessions
+    \item Union acts: forms caucuses, strike committee, change strike fund policy
+    \item Does the industrial action end?
+    \begin{itemize}
+        \item If participation has already collapsed to 0, is there any reasonable expectation that changes in policy will cause participation to improve?
+        \item Employer loss exceeds certain thresholds, so assumed to cede to key demand.
+        \item If neither events occur, repeat phases. 
+    \end{itemize}
+\end{enumerate}
+
+There is a day-by-day model of morale:
+
+\begin{enumerate}
+    \item  Workers either strike or go to work
+    \item  Contacts on either the workplace or the union network either boost morale or dishearten depending on who contact is with
+\end{enumerate}
+
+The model operates on calendar time, with the user specifying a start date. Initially a Monday to Friday working pattern is assumed but this could be altered in future versions of the model.
+
+\section{Variables}
+
+\subsection{Independent variables}
+
+We will change these to test different hypotheses about union strategy decisions.
+
+\begin{itemize}
+    \item Whether caucuses happen
+    \item Whether pickets and strike committees form
+    \item Union strike fund policy
+    \item Employer retaliation and concession policy
+\end{itemize}
+
+\subsection{Agent variables}
+
+These dependent variables will evolve over the simulation period. Initial conditions will be inputs to the model, calibrated based on union data and academic case studies.
+
+\subsubsection{Worker variables}
+\begin{itemize}
+    \item Member on strike (state)
+    \item Member not on strike (state)
+    \item Non-member not on strike (state)
+    \item earnings or losses during simulation period
+    \item morale
+\end{itemize}
+
+\subsubsection{Employer variables}
+\begin{itemize}
+    \item earnings or losses during simulation period
+\end{itemize}
+
+\subsubsection{Union variables}
+\begin{itemize}
+    \item earnings or losses during simulation period
+    \item strike fund size
+\end{itemize}
+
+\subsection{Network parameters}
+
+The structure of the network is fixed over the course of the model, although policy variables may change whether parts of the network are activated or not. 
+
+\subsection{Employer network parameters:}
+\begin{itemize}
+    \item Executive size
+    \item Department size
+    \item Lab / team size
+\end{itemize}
+
+\subsubsection{Union network parameters:}
+
+\begin{itemize}
+    \item Bargaining committee size
+    \item Department density
+    \item Lab / team density
+    \item Structure of the caucuses
+    \item Structure of ‘picket lines and strike committees’ i.e. peer to peer communication in lab / team / department during strike while not seeing each other in workplace
+\end{itemize}
+
+\section{Transactions matrix}
+
+There are two types of flows: money and morale. ‘Hope’ improves morale and ‘fear’ worsens it.
+
+\begin{tabular}{| l | l | l | l | l | l | }
+\hline
+  & \textbf{Members on strike} & \textbf{Members not on strike} & \textbf{Non-members} & \textbf{Employer} & \textbf{Union} \\
+\hline
+\textbf{Dues} & -Dues & -Dues &   &   & +Dues \\
+\hline
+\textbf{Hope} & [Hope] & [Hope]
+
+  & [Hope] &   &  \\
+\hline
+\textbf{Fear} & [Fear] & [Fear] & [Fear] &   & \\
+\hline
+\textbf{Wages} &   & +Wage & +Wage & -Wages & \\
+\hline
+\textbf{Work} &   & -Work & -Work & +Work & \\
+\hline
+\textbf{Strike pay} & +Str\_pay &   &   &   & -Str\_pay \\
+\hline
+\end{tabular}
+
+\section{Balance sheet}
+\begin{tabular}{| l | l | l | l | l | l | l |}
+\hline
+  & \textbf{Members on strike} & \textbf{Members not striking} & \textbf{Non-members} & \textbf{Employer} & \textbf{Union} & \textbf{Bank} \\
+\hline
+Deposits & +Dep & +Dep & +Dep & +Dep & +Dep & -Deps \\
+\hline
+Morale & +Morale & +Morale & +Morale &   &   &   \\
+\hline
+\end{tabular}
+
+\section{Functions specification}
+
+\subsubsection{Money model}
+
+Wages $w_{t,i}$ are assumed to be constant for each worker throughout the simulation period, apart from any concessions $c_{t,i}$ granted by the employer. Concessions granted at $t=x$ are assumed to accrue throughout subsequent periods. Wages accrue daily and are equal to:
+
+\begin{equation}
+    w_{t,i} = w_{t=0,i} +\sum_{t=x}^{t} c_{t,i}
+\end{equation}
+\begin{equation}
+    w_{t} = \sum_{1}^{i} w_{t,i}
+\end{equation}
+
+Strike pay $g_{t,i}$ is decided by the union and will initially be set constant at $g_{t=0,i}$. We will experiment with simple rules by which unions adjust strike pay rates during the monthly strategy review, such as increasing strike pay when participation falls.
+
+Workers' net earnings and losses $s_{t_i}$ are equal to the sum of their savings in the first period, wages and strike pay after subtracting union dues, $d_{t,i}$:
+
+\begin{equation}
+    s_{t_i} = \sum_{t=0}^{t} w_{t,i} + g_{t,i} - d_{t,i}
+\end{equation}
+
+The union holds a strike fund with a balance $u_{t}$ equal to its starting balance plus any dues received, minus any strike pay granted:
+
+\begin{equation}
+    u_{t} = u_{0} + \sum_{t=0}^{t} (d_{t,i}-g_{t,i})
+\end{equation}
+
+Employer revenue on a given day, $r_t$, is a function of the number of pepole that worked that day. In this initial version of the model, the employer is assumed to sell all goods or services produced by workers at a fixed markup, $\mu$. \footnote{This could be interpreted as the employer being assumed to be a small supplier in a competitive market, where the strike has no impact on overall market supplier or demand. In this circumstance, other firms' sales would be assumed to increase to perfectly compensate for the supply disruption caused by the strike. A future version of the model could relax these assumptions, incorporating feedback effects from the impact of strikes on market supply.}
+
+\begin{equation}
+r_t = \mu \cdot workdays_t
+\end{equation}
+
+The employer's net earnings and losses give their balance $b_t$:
+
+\begin{equation}
+    b_t = \sum_{t=0}^{t} R_t
+\end{equation}
+
+The employer has a threshold $\tau_t$ beyond which they grant concessions. This threshold is yet to be defined.
+
+\subsubsection{Morale model}
+
+Each worker has a morale $m_{t,i} \in[0,1]$ representing their likelihood of participating in strike action. Their morale is a function $M$ of their morale in the previous period, their savings, the gap between their target wage and their current wage and their assessment of the morale of other workers.
+
+\begin{equation}
+    m_{t,i} = M(m_{t-1,i}, vibes_{t,i}, s_{t,i}, \frac{w_{target,i}-w_{t,i}}{w_{t,i}})
+\end{equation}
+
+Each period, workers reflect on their own circumstances, updating their morale with any changes in their financial position. 
+
+Sigmoid specification
+\begin{equation}
+    private~morale_{t,i} = \frac{\alpha}{1+e^{w_{t,i}-w_{target,i}}}\times\frac{\beta}{1+e^{s_{t,i}-s_{t=0,i}}}\times\gamma m_{t-1,i})
+\end{equation}
+
+No motivation, no private morale specification
+\begin{equation}
+    private~morale_{t,i} = \alpha\frac{w_{target,i}-w_{t,i}}{w_{t,i}}\times(\beta m_{t-1,i}+\gamma\frac{s_{t,i}-s_{t=0,i}}{s_{t=0,i}})
+\end{equation}
+
+Linear specification (which could then be pushed through a logistic function)
+\begin{equation}
+    private~morale_{t,i} = \alpha\frac{w_{target,i}-w_{t,i}}{w_{t,i}}+\beta\frac{s_{t,i}-s_{t=0,i}}{s_{t=0,i}}+\gamma m_{t-1,i}
+\end{equation}
+
+After reflecting on their own circumstances, workers then have interactions with others on the network. With each interaction they build expectations of how willing others are to strike. Each day, workers learn the morale levels of every worker they interact with and take an average, giving their assessment of $vibes_{t,i}$. \footnote{This means order or interaction does not matter. An alternative would be for agents to instantaneously update with each interaction.} Workers then essentially take an average of their own morale level and the morale of the group. 
+Each workers' overall morale is then an average of their private morale calculation and the 'vibes' they pick up through interactions with other workers in set $j$.
+\begin{equation}
+    m_{t,i} = \frac{\alpha private~morale_{t,i} + \beta vibes_{t,i}}{\alpha+\beta}
+\end{equation}
+\begin{equation} 
+vibes_{t,i}=\frac{1}{j}\sum_{1}^{j}morale_{t,j}
+\end{equation}
+
+Motivation is represented in the morale equation by the gap between each workers' current wage and their target wage, $w_{target,i}$. Initial versions of the model will include uniform wage levels and wage target levels, but heterogeneity could be introduced in future versions. As this motivation level is a factor in individuals' private morale functions, other worker' motivation level will indirectly affect workers' own morale through social interactions. This could allow for solidarity situations where someone satisfied with their own wage still strikes in solidarity with others.
+
+\subsubsection{Participation model}
+
+On each day, workers decide whether to participate in the strike. Their participation decision, $p_{t,i}$ is a function of morale. It can be equal to either 0 or 1. If $m_{t,i}\leq0.5$, $p_{t,i}=0$. If $m_{t,i}>0.5$, $p_{t,i}=0$. 
+
+The number of people that strike on a given day is given by:
+
+\begin{equation}
+    strikedays_t = \sum_{1}^{i} p_{t,i}
+\end{equation}
+
+The number of people that go to work on a given day is given by:
+\begin{equation}
+workdays_t = 1 - strikedays_t
+\end{equation}
+
+
+\section{Data}
+We have gathered data....
+
+\section{Calibration}
+To calibrate...
+
+\section{Simulations}
+We ran ...
+
+\section{Validation}
+We compared the simulation results with historical evidence about the development of the strikes to which we calibrated the model...
+
+\section{Experiments}
+We tested how changing union structure would have affected the development of the strikes studied. We included two experiments: presence of caucuses and peer-to-peer communication through picket lines. These network structure changes mean that...
+
+\section{Findings}
+Our experiments find that... Given that our model...
+
+\section{Conclusion}
+
+\section{Bibliography}
+
+\section{Annex 1: variable list}
+
+\section{Annex 2: data sources}
+
+\end{document}
