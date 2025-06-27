@@ -18,6 +18,19 @@ StrikeSim generates random networks representing the internal structures of unio
 - **Visualization**: Network and time series visualizations
 - **Monte Carlo**: Support for multiple simulation runs with different random networks
 
+## Features
+
+- **Agent-based simulation** with workers, employer, and union
+- **Network-based interactions** using union and employer organizational structures
+- **Multiple morale specifications** (sigmoid, linear, no motivation)
+- **Financial modeling** including wages, strike pay, dues, and daily expenses
+- **Interactive dashboard** with real-time parameter adjustment
+- **Time series visualization** of key metrics over time
+- **Network visualization** showing strike spread through organizational networks
+- **Animated GIF generation** showing network evolution over time
+- **Data export** to CSV and HDF5 formats
+- **Monte Carlo simulation** support for statistical analysis
+
 ## Installation
 
 1. Clone the repository:
@@ -179,3 +192,27 @@ This model is designed for research and union decision-making. Contributions are
 
 If you use this model in research, please cite:
 [Add citation information when paper is published]
+
+### Network Visualization
+
+The dashboard includes interactive network visualizations showing both union and employer networks:
+
+- **Real-time slider**: Step through each day of the simulation
+- **Color-coded nodes**: Red (striking), Blue (working), Orange (union committee), Green (management)
+- **Network statistics**: Shows network size and connectivity information
+- **Animated GIF generation**: Create animations showing network evolution over time
+
+#### Creating Network Animations
+
+1. Run a simulation in the dashboard
+2. Scroll to the "Interactive Network Visualization" section
+3. Adjust animation settings:
+   - **FPS**: Control animation speed (1-5 frames per second)
+   - **Max Frames**: Limit frames for smaller file size
+4. Click "Generate Animation" to create a GIF
+5. Download the animation for sharing or analysis
+
+The animation shows how strike participation spreads through both organizational networks over time, providing insights into:
+- Strike contagion patterns
+- Network influence on participation decisions
+- Temporal dynamics of collective action

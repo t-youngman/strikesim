@@ -14,14 +14,15 @@ concession_threshold = -10000.0
 #union policy
 strike_pay_policy = 'fixed'
 strike_pay_rate = 0.5  # As fraction of normal wage
-dues_rate = 0.02  # As fraction of wage
+dues_rate = 0.05  # As fraction of wage
 
 #worker parameters
 num_workers = 50
 initial_wage = 100.0
 target_wage = 105.0  # Higher target wage for more motivation
 initial_savings_range = (500.0, 2000.0)  # Higher initial savings
-initial_morale_range = (0.6, 0.9)  # Higher initial morale
+initial_morale_range = (0.0, 0.1)  # Higher initial morale
+daily_expenditure_rate = 0.95  # Daily expenses as fraction of daily wage (1.0 = full daily wage)
 
 #financial parameters
 initial_employer_balance = 50000.0  # Lower employer balance
@@ -48,9 +49,9 @@ private_morale_alpha = 0.5
 social_morale_beta = 0.5  # More weight on social factors
 
 #sigmoid morale parameters
-sigmoid_alpha = 1.0
-sigmoid_beta = 1.0
-sigmoid_gamma = 1.0
+inflation = 0.05
+belt_tightening = -0.2
+sigmoid_gamma = 0.8
 
 #linear morale parameters
 linear_alpha = 0.3

@@ -10,6 +10,8 @@ from typing import List, Dict, Set, Tuple, Optional
 import random
 import os
 import glob
+from PIL import Image
+import io
 
 
 #import union and employer data, use defaults if no data provided
@@ -35,6 +37,7 @@ class Worker:
         self.morale = initial_morale
         self.morale_history = [initial_morale]
         self.net_earnings = 0.0  # Cumulative earnings/losses during simulation
+        self.total_expenditures = 0.0  # Track total expenditures
         
     def update_morale(self, new_morale: float):
         """Update worker's morale and add to history"""
@@ -59,6 +62,11 @@ class Worker:
         """Pay union dues"""
         self.union_dues += amount
         self.net_earnings -= amount
+        
+    def pay_daily_expenses(self, amount: float):
+        """Pay daily living expenses"""
+        self.net_earnings -= amount
+        self.total_expenditures += amount
 
 class Employer:
     def __init__(self, initial_balance: float, revenue_markup: float = 1.5,
@@ -207,7 +215,9 @@ class StrikeSimulation:
             'working_workers': [],
             'employer_balance': [],
             'union_balance': [],
-            'average_morale': []
+            'average_morale': [],
+            'average_savings': [],
+            'worker_states': []  # Track each worker's state at each timestep
         }
         
     def generate_employer_network(self, executive_size: int = 3, 
@@ -437,20 +447,18 @@ class StrikeSimulation:
         savings_change = (worker.net_earnings - worker.savings) / (worker.initial_wage * max(self.day_count, 1))
         
         if morale_spec == 'sigmoid':
-            # Sigmoid specification from the paper - fixed implementation
-            def calibrate_sigmoid(target, reference):
+            # Sigmoid specification 
+            def calibrate_sigmoid(reference, target):
                 return -(1/reference)*np.log((1-target)/target)
-            alpha = calibrate_sigmoid(self.settings.get('inflation', 0.05), 0.9)
-            beta = calibrate_sigmoid(self.settings.get('belt_tightening', -0.2),0.1)
+            alpha = calibrate_sigmoid(self.settings.get('inflation', 0.05), 0.6)
+            beta = calibrate_sigmoid(self.settings.get('belt_tightening', -0.2),0.4)
             gamma = self.settings.get('sigmoid_gamma', 1)
-            
             # Factors
-            wage_factor = 0.1 / (1 + np.exp(-wage_gap * alpha))  # Positive wage gap increases morale
-            savings_factor = 0.1 / (1 + np.exp(-savings_change * beta))  # Positive savings change increases morale
-            previous_morale = gamma * worker.morale
+            wage_factor = 1 / (1 + np.exp(-wage_gap * alpha))  # Positive wage gap increases morale
+            savings_factor = 1 / (1 + np.exp(-savings_change * beta))  # Positive savings change increases morale
             
             # Combine factors - ensure result is between 0 and 1
-            combined_morale = (wage_factor + savings_factor + previous_morale) / 3
+            combined_morale = gamma*worker.morale + (1-gamma)*(wage_factor + savings_factor)/2
             return max(0.0, min(1.0, combined_morale))
             
         elif morale_spec == 'linear':
@@ -521,10 +529,10 @@ class StrikeSimulation:
         striking_workers = [w for w in self.workers if w.state == 'striking']
         working_workers = [w for w in self.workers if w.state == 'not_striking']
         
-        # Pay wages to working workers
+        # Pay wages to working workers - simplify this later
         daily_wage_cost = 0.0
         for worker in working_workers:
-            daily_wage = worker.current_wage / 20  # Assuming 20 working days per month
+            daily_wage = worker.current_wage 
             worker.receive_wage(daily_wage)
             daily_wage_cost += daily_wage
         
@@ -534,9 +542,13 @@ class StrikeSimulation:
         # Calculate employer revenue
         self.employer.calculate_daily_revenue(len(working_workers), daily_wage_cost)
         
-        # Collect union dues (monthly, but simplified here)
-        if self.day_count % 20 == 0:  # Monthly dues collection
-            self.union.collect_dues(self.workers)
+        # Collect union dues daily
+        self.union.collect_dues(self.workers)
+        
+        # Process daily living expenses for all workers
+        for worker in self.workers:
+            daily_expenses = worker.initial_wage * self.settings.get('daily_expenditure_rate', 0.95)
+            worker.pay_daily_expenses(daily_expenses)
     
     def process_participation_decisions(self):
         """Process daily participation decisions for all workers"""
@@ -550,31 +562,7 @@ class StrikeSimulation:
     
     def process_monthly_review(self):
         """Process monthly strategy review and policy changes"""
-        # Check if strike should end
-        striking_count = sum(1 for w in self.workers if w.state == 'striking')
-        total_members = sum(1 for w in self.workers if w.state in ['striking', 'not_striking'])
-        
-        # Strike ends if participation collapses
-        if striking_count == 0:
-            return 'strike_collapsed'
-        
-        # Strike ends if employer grants concession
-        if self.employer.should_grant_concession():
-            concession_amount = 5.0  # Could be made configurable
-            for worker in self.workers:
-                worker.current_wage += concession_amount
-            self.employer.grant_concession(concession_amount * len(self.workers))
-            return 'employer_conceded'
-        
-        # Union policy adjustments based on participation
-        participation_rate = striking_count / total_members if total_members > 0 else 0
-        
-        # Adjust strike pay based on participation
-        if participation_rate < 0.3 and self.union.strike_fund_balance > 10000:
-            self.union.strike_pay_rate = min(0.8, self.union.strike_pay_rate + 0.1)
-        elif participation_rate > 0.8:
-            self.union.strike_pay_rate = max(0.3, self.union.strike_pay_rate - 0.05)
-        
+        # pending
         return 'continue'
     
     def run_daily_cycle(self):
@@ -597,6 +585,7 @@ class StrikeSimulation:
         striking_count = sum(1 for w in self.workers if w.state == 'striking')
         working_count = sum(1 for w in self.workers if w.state == 'not_striking')
         avg_morale = np.mean([w.morale for w in self.workers])
+        avg_savings = np.mean([w.savings + w.net_earnings for w in self.workers])
         
         self.simulation_data['dates'].append(self.current_date)
         self.simulation_data['striking_workers'].append(striking_count)
@@ -604,6 +593,8 @@ class StrikeSimulation:
         self.simulation_data['employer_balance'].append(self.employer.balance)
         self.simulation_data['union_balance'].append(self.union.strike_fund_balance)
         self.simulation_data['average_morale'].append(avg_morale)
+        self.simulation_data['average_savings'].append(avg_savings)
+        self.simulation_data['worker_states'].append([w.state for w in self.workers])
         
         # Monthly review
         if self.day_count % 20 == 0:  # Monthly review
@@ -673,6 +664,7 @@ class StrikeSimulation:
         final_employer_balance = self.simulation_data['employer_balance'][-1] if self.simulation_data['employer_balance'] else 0
         final_union_balance = self.simulation_data['union_balance'][-1] if self.simulation_data['union_balance'] else 0
         avg_morale = np.mean(self.simulation_data['average_morale']) if self.simulation_data['average_morale'] else 0
+        avg_savings = np.mean(self.simulation_data['average_savings']) if self.simulation_data['average_savings'] else 0
         
         # Determine outcome
         if final_striking == 0:
@@ -690,10 +682,12 @@ class StrikeSimulation:
             'final_employer_balance': [final_employer_balance],
             'final_union_balance': [final_union_balance],
             'average_morale': [avg_morale],
+            'average_savings': [avg_savings],
             'outcome': [outcome],
             'total_concessions': [self.employer.concessions_granted],
             'total_strike_pay': [self.union.strike_pay_distributed],
-            'total_dues_collected': [self.union.dues_collected]
+            'total_dues_collected': [self.union.dues_collected],
+            'total_expenditures': [sum(w.total_expenditures for w in self.workers)]
         }
         
         df = pd.DataFrame(summary_data)
@@ -716,6 +710,7 @@ class StrikeSimulation:
             final_employer_balance = sim_data['employer_balance'][-1] if sim_data['employer_balance'] else 0
             final_union_balance = sim_data['union_balance'][-1] if sim_data['union_balance'] else 0
             avg_morale = np.mean(sim_data['average_morale']) if sim_data['average_morale'] else 0
+            avg_savings = np.mean(sim_data['average_savings']) if sim_data['average_savings'] else 0
             
             # Determine outcome
             if final_striking == 0:
@@ -732,6 +727,7 @@ class StrikeSimulation:
                 'final_employer_balance': final_employer_balance,
                 'final_union_balance': final_union_balance,
                 'average_morale': avg_morale,
+                'average_savings': avg_savings,
                 'outcome': outcome,
                 'total_concessions': self.employer.concessions_granted,
                 'total_strike_pay': self.union.strike_pay_distributed,
@@ -764,37 +760,50 @@ class StrikeSimulation:
     
     def visualize_time_series(self, save_path: str = 'time_series.png'):
         """Visualize time series data"""
-        fig, axes = plt.subplots(2, 2, figsize=(15, 10))
+        fig, axes = plt.subplots(2, 3, figsize=(18, 10))
+        
+        # Create day numbers for x-axis
+        days = list(range(len(self.simulation_data['striking_workers'])))
         
         # Worker participation over time
-        axes[0, 0].plot(self.simulation_data['striking_workers'], label='Striking', color='red')
-        axes[0, 0].plot(self.simulation_data['working_workers'], label='Working', color='blue')
+        axes[0, 0].plot(days, self.simulation_data['striking_workers'], label='Striking', color='red')
+        axes[0, 0].plot(days, self.simulation_data['working_workers'], label='Working', color='blue')
         axes[0, 0].set_title('Worker Participation Over Time')
-        axes[0, 0].set_xlabel('Day')
+        axes[0, 0].set_xlabel('Day of Simulation')
         axes[0, 0].set_ylabel('Number of Workers')
         axes[0, 0].legend()
         axes[0, 0].grid(True, alpha=0.3)
         
         # Average morale over time
-        axes[0, 1].plot(self.simulation_data['average_morale'], color='purple')
+        axes[0, 1].plot(days, self.simulation_data['average_morale'], color='purple')
         axes[0, 1].set_title('Average Worker Morale Over Time')
-        axes[0, 1].set_xlabel('Day')
+        axes[0, 1].set_xlabel('Day of Simulation')
         axes[0, 1].set_ylabel('Average Morale')
         axes[0, 1].grid(True, alpha=0.3)
         
+        # Average savings over time
+        axes[0, 2].plot(days, self.simulation_data['average_savings'], color='brown')
+        axes[0, 2].set_title('Average Worker Savings Over Time')
+        axes[0, 2].set_xlabel('Day of Simulation')
+        axes[0, 2].set_ylabel('Average Savings ($)')
+        axes[0, 2].grid(True, alpha=0.3)
+        
         # Employer balance over time
-        axes[1, 0].plot(self.simulation_data['employer_balance'], color='green')
+        axes[1, 0].plot(days, self.simulation_data['employer_balance'], color='green')
         axes[1, 0].set_title('Employer Balance Over Time')
-        axes[1, 0].set_xlabel('Day')
+        axes[1, 0].set_xlabel('Day of Simulation')
         axes[1, 0].set_ylabel('Balance ($)')
         axes[1, 0].grid(True, alpha=0.3)
         
         # Union balance over time
-        axes[1, 1].plot(self.simulation_data['union_balance'], color='orange')
+        axes[1, 1].plot(days, self.simulation_data['union_balance'], color='orange')
         axes[1, 1].set_title('Union Strike Fund Balance Over Time')
-        axes[1, 1].set_xlabel('Day')
+        axes[1, 1].set_xlabel('Day of Simulation')
         axes[1, 1].set_ylabel('Balance ($)')
         axes[1, 1].grid(True, alpha=0.3)
+        
+        # Hide the last subplot
+        axes[1, 2].set_visible(False)
         
         plt.tight_layout()
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
@@ -815,9 +824,11 @@ class StrikeSimulation:
             'final_union_balance': self.simulation_data['union_balance'][-1],
             'average_morale': np.mean(self.simulation_data['average_morale']),
             'morale_volatility': np.std(self.simulation_data['average_morale']),
+            'average_savings': np.mean(self.simulation_data['average_savings']),
             'total_concessions': self.employer.concessions_granted,
             'total_strike_pay': self.union.strike_pay_distributed,
-            'total_dues_collected': self.union.dues_collected
+            'total_dues_collected': self.union.dues_collected,
+            'total_expenditures': sum(w.total_expenditures for w in self.workers)
         }
         
         # Determine outcome
@@ -829,3 +840,196 @@ class StrikeSimulation:
             analysis['outcome'] = 'ongoing'
         
         return analysis
+    
+    def visualize_networks_at_timestep(self, timestep: int, save_path: str = None):
+        """Visualize the union and employer networks at a specific timestep"""
+        if timestep >= len(self.simulation_data['worker_states']):
+            return None
+            
+        worker_states = self.simulation_data['worker_states'][timestep]
+        
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(20, 10))
+        
+        # Union network
+        pos_union = nx.spring_layout(self.union_network, k=1, iterations=50)
+        
+        # Color nodes based on worker states
+        node_colors_union = []
+        node_sizes_union = []
+        node_labels_union = {}
+        
+        for node in self.union_network.nodes():
+            if node < len(worker_states):  # Worker node
+                if worker_states[node] == 'striking':
+                    node_colors_union.append('#ff4444')  # Bright red
+                elif worker_states[node] == 'not_striking':
+                    node_colors_union.append('#4444ff')  # Bright blue
+                else:
+                    node_colors_union.append('#888888')  # Gray
+                node_sizes_union.append(400)
+                node_labels_union[node] = f'W{node}'
+            else:  # Committee node
+                node_colors_union.append('#ffaa00')  # Orange
+                node_sizes_union.append(600)
+                node_labels_union[node] = f'C{abs(node)}'
+        
+        nx.draw(self.union_network, pos_union, ax=ax1,
+                node_color=node_colors_union, node_size=node_sizes_union,
+                labels=node_labels_union, font_size=10, font_weight='bold',
+                edge_color='gray', alpha=0.7, width=2)
+        ax1.set_title(f'Union Network - Day {timestep}', fontsize=14, fontweight='bold')
+        
+        # Add legend for union network
+        legend_elements = [
+            plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='#ff4444', 
+                      markersize=15, label='Striking Worker'),
+            plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='#4444ff', 
+                      markersize=15, label='Working Worker'),
+            plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='#ffaa00', 
+                      markersize=15, label='Union Committee')
+        ]
+        ax1.legend(handles=legend_elements, loc='upper right', fontsize=10)
+        
+        # Employer network
+        pos_employer = nx.spring_layout(self.employer_network, k=1, iterations=50)
+        
+        # Color nodes based on worker states
+        node_colors_employer = []
+        node_sizes_employer = []
+        node_labels_employer = {}
+        
+        for node in self.employer_network.nodes():
+            if node < len(worker_states):  # Worker node
+                if worker_states[node] == 'striking':
+                    node_colors_employer.append('#ff4444')  # Bright red
+                elif worker_states[node] == 'not_striking':
+                    node_colors_employer.append('#4444ff')  # Bright blue
+                else:
+                    node_colors_employer.append('#888888')  # Gray
+                node_sizes_employer.append(400)
+                node_labels_employer[node] = f'W{node}'
+            else:  # Management node
+                node_colors_employer.append('#44ff44')  # Bright green
+                node_sizes_employer.append(600)
+                node_labels_employer[node] = f'M{node}'
+        
+        nx.draw(self.employer_network, pos_employer, ax=ax2,
+                node_color=node_colors_employer, node_size=node_sizes_employer,
+                labels=node_labels_employer, font_size=10, font_weight='bold',
+                edge_color='gray', alpha=0.7, width=2)
+        ax2.set_title(f'Employer Network - Day {timestep}', fontsize=14, fontweight='bold')
+        
+        # Add legend for employer network
+        legend_elements = [
+            plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='#ff4444', 
+                      markersize=15, label='Striking Worker'),
+            plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='#4444ff', 
+                      markersize=15, label='Working Worker'),
+            plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='#44ff44', 
+                      markersize=15, label='Management')
+        ]
+        ax2.legend(handles=legend_elements, loc='upper right', fontsize=10)
+        
+        plt.tight_layout()
+        
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        
+        return fig
+    
+    def create_network_animation(self, save_path: str = 'network_animation.gif', 
+                                fps: int = 2, max_frames: int = None):
+        """Create an animated GIF showing network evolution over time"""
+        if not self.simulation_data['worker_states']:
+            print("No simulation data available for animation")
+            return None
+            
+        # Determine number of frames
+        total_frames = len(self.simulation_data['worker_states'])
+        if max_frames and max_frames < total_frames:
+            # Sample frames evenly
+            frame_indices = np.linspace(0, total_frames-1, max_frames, dtype=int)
+        else:
+            frame_indices = range(total_frames)
+        
+        images = []
+        
+        print(f"Creating animation with {len(frame_indices)} frames...")
+        
+        for i, timestep in enumerate(frame_indices):
+            print(f"Processing frame {i+1}/{len(frame_indices)} (day {timestep})")
+            
+            # Generate network visualization for this timestep
+            fig = self.visualize_networks_at_timestep(timestep)
+            if fig is None:
+                continue
+                
+            # Convert matplotlib figure to PIL Image
+            buf = io.BytesIO()
+            fig.savefig(buf, format='png', dpi=150, bbox_inches='tight')
+            buf.seek(0)
+            img = Image.open(buf)
+            images.append(img)
+            
+            # Close the figure to free memory
+            plt.close(fig)
+        
+        if not images:
+            print("No images generated for animation")
+            return None
+            
+        # Save as GIF
+        print(f"Saving animation to {save_path}...")
+        images[0].save(
+            save_path,
+            save_all=True,
+            append_images=images[1:],
+            duration=1000//fps,  # Duration in milliseconds
+            loop=0  # Loop indefinitely
+        )
+        
+        print(f"Animation saved successfully! {len(images)} frames at {fps} FPS")
+        return save_path
+
+# Standalone function to create animations from saved simulation data
+def create_animation_from_saved_data(hdf5_file: str, output_gif: str = 'network_animation.gif', 
+                                   fps: int = 2, max_frames: int = None):
+    """Create a network animation from saved simulation data"""
+    try:
+        # Load simulation data
+        with h5py.File(hdf5_file, 'r') as f:
+            # Create a minimal simulation object with loaded data
+            sim = StrikeSimulation({})
+            sim.simulation_data = {
+                'dates': [],
+                'striking_workers': [],
+                'working_workers': [],
+                'employer_balance': [],
+                'union_balance': [],
+                'average_morale': [],
+                'average_savings': [],
+                'worker_states': []
+            }
+            
+            # Load time series data
+            for key in sim.simulation_data.keys():
+                if key == 'dates':
+                    date_strings = f[f'time_series/{key}'][:]
+                    sim.simulation_data[key] = [datetime.fromisoformat(d.decode()) for d in date_strings]
+                else:
+                    sim.simulation_data[key] = list(f[f'time_series/{key}'][:])
+            
+            # Load networks (simplified - would need more complex loading for full functionality)
+            print("Note: Network animation from saved data may not show full network structure")
+            
+        # Create animation
+        return sim.create_network_animation(output_gif, fps, max_frames)
+        
+    except Exception as e:
+        print(f"Error creating animation from saved data: {e}")
+        return None
+
+if __name__ == "__main__":
+    # Example usage
+    print("StrikeSim Network Animation Tool")
+    print("Use the dashboard to create animations interactively, or call create_animation_from_saved_data()")
