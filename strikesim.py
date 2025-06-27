@@ -8,6 +8,8 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from typing import List, Dict, Set, Tuple, Optional
 import random
+import os
+import glob
 
 
 #import union and employer data, use defaults if no data provided
@@ -25,6 +27,7 @@ class Worker:
         self.id = id
         self.state = 'not_striking'  # 'striking', 'not_striking', 'non_member'
         self.current_wage = initial_wage
+        self.initial_wage = initial_wage
         self.target_wage = target_wage
         self.savings = initial_savings
         self.union_dues = 0.0
@@ -85,7 +88,7 @@ class Employer:
         
     def grant_concession(self, amount: float):
         """Grant wage concession to workers"""
-        self.concessions_granted += amount
+        self.concessions_granted += amount #is this a one-off or permanent?
         self.balance -= amount
 
 class Union:
@@ -237,14 +240,18 @@ class StrikeSimulation:
         
         return G
     
-    def generate_union_network(self, bargaining_committee_size: int = 3,
-                              department_density: float = 0.3,
+    def generate_union_network(self, num_workers: int, density: float = 0.3,
+                              bargaining_committee_size: int = 3,
                               team_density: float = 0.5) -> nx.Graph:
-        """Generate union network with bargaining committee and department/team connections"""
+        """Generate union network with only union members as nodes, based on density."""
         G = nx.Graph()
         
-        # Create bargaining committee
-        committee = list(range(bargaining_committee_size))
+        # Determine union members
+        num_union_members = max(1, int(density * num_workers))
+        union_member_ids = sorted(random.sample(range(num_workers), num_union_members))
+        
+        # Create bargaining committee (committee IDs are negative to avoid collision)
+        committee = list(range(-1, -1 - bargaining_committee_size, -1))
         for i in committee:
             G.add_node(i, level='committee', type='committee')
         
@@ -254,25 +261,73 @@ class StrikeSimulation:
                 if i != j:
                     G.add_edge(i, j)
         
-        # Add department and team connections based on density
-        # This is a simplified version - in practice, you'd want to match
-        # union structure to actual workplace structure
-        total_workers = len(self.workers)
-        
-        for i in range(total_workers):
+        # Add union members and connect to committee
+        for i in union_member_ids:
             G.add_node(i, level='worker', type='worker')
-            
-            # Connect some workers to committee
-            if random.random() < 0.2:  # 20% chance
+            # Connect some union members to committee
+            if random.random() < 0.2 and committee:
                 committee_member = random.choice(committee)
                 G.add_edge(i, committee_member)
-            
-            # Connect workers to each other based on density
-            for j in range(i + 1, total_workers):
-                if random.random() < team_density:
+            # Connect union members to each other based on team_density
+            for j in union_member_ids:
+                if i < j and random.random() < team_density:
                     G.add_edge(i, j)
         
         return G
+    
+    def load_employer_network(self, filename: str) -> nx.Graph:
+        """Load employer network from .gexf file"""
+        try:
+            filepath = os.path.join('networks', 'employers', filename)
+            if not filename.endswith('.gexf'):
+                filepath += '.gexf'
+            
+            if not os.path.exists(filepath):
+                raise FileNotFoundError(f"Employer network file not found: {filepath}")
+            
+            G = nx.read_gexf(filepath)
+            print(f"Loaded employer network from {filepath} with {G.number_of_nodes()} nodes and {G.number_of_edges()} edges")
+            return G
+            
+        except Exception as e:
+            print(f"Error loading employer network from {filename}: {e}")
+            print("Falling back to generated network")
+            return self.generate_employer_network()
+    
+    def load_union_network(self, filename: str) -> nx.Graph:
+        """Load union network from .gexf file"""
+        try:
+            filepath = os.path.join('networks', 'unions', filename)
+            if not filename.endswith('.gexf'):
+                filepath += '.gexf'
+            
+            if not os.path.exists(filepath):
+                raise FileNotFoundError(f"Union network file not found: {filepath}")
+            
+            G = nx.read_gexf(filepath)
+            print(f"Loaded union network from {filepath} with {G.number_of_nodes()} nodes and {G.number_of_edges()} edges")
+            return G
+            
+        except Exception as e:
+            print(f"Error loading union network from {filename}: {e}")
+            print("Falling back to generated network")
+            return self.generate_union_network(num_workers=50)
+    
+    def get_available_networks(self) -> Dict[str, List[str]]:
+        """Get list of available network files"""
+        networks = {'employers': [], 'unions': []}
+        
+        # Get employer networks
+        employer_path = os.path.join('networks', 'employers', '*.gexf')
+        employer_files = glob.glob(employer_path)
+        networks['employers'] = [os.path.basename(f).replace('.gexf', '') for f in employer_files]
+        
+        # Get union networks
+        union_path = os.path.join('networks', 'unions', '*.gexf')
+        union_files = glob.glob(union_path)
+        networks['unions'] = [os.path.basename(f).replace('.gexf', '') for f in union_files]
+        
+        return networks
     
     def is_working_day(self, date: datetime) -> bool:
         """Check if a given date is a working day"""
@@ -287,22 +342,62 @@ class StrikeSimulation:
     
     def initialize_simulation(self, num_workers: int = 50, 
                             initial_wage: float = 100.0,
-                            target_wage: float = 120.0,
+                            target_wage: float = 105.0,
                             initial_employer_balance: float = 100000.0,
                             initial_strike_fund: float = 50000.0):
         """Initialize the simulation with workers, employer, and union"""
         
         # Use settings if provided, otherwise use defaults
-        num_workers = self.settings.get('num_workers', num_workers)
+        participation_threshold = self.settings.get('participation_threshold', 0.5)
         initial_wage = self.settings.get('initial_wage', initial_wage)
         target_wage = self.settings.get('target_wage', target_wage)
         initial_employer_balance = self.settings.get('initial_employer_balance', initial_employer_balance)
         initial_strike_fund = self.settings.get('initial_strike_fund', initial_strike_fund)
         initial_morale_range = self.settings.get('initial_morale_range', (0.5, 0.8))
         initial_savings_range = self.settings.get('initial_savings_range', (0.0, 1000.0))
-        initial_strike_participation_rate = self.settings.get('initial_strike_participation_rate', 0.6)
+        department_density = self.settings.get('department_density', 0.3)
+        team_density = self.settings.get('team_density', 0.5)
+        bargaining_committee_size = self.settings.get('bargaining_committee_size', 3)
         
-        # Create workers
+        # Initialize networks first to determine number of workers
+        employer_network_file = self.settings.get('employer_network_file', None)
+        union_network_file = self.settings.get('union_network_file', None)
+        employer_network_loaded = False
+        union_network_loaded = False
+        
+        if employer_network_file:
+            self.employer_network = self.load_employer_network(employer_network_file)
+            employer_network_loaded = True
+        else:
+            self.employer_network = None
+        
+        if union_network_file:
+            self.union_network = self.load_union_network(union_network_file)
+            union_network_loaded = True
+        else:
+            self.union_network = None
+        
+        # Decide number of workers
+        if employer_network_loaded and self.employer_network is not None:
+            num_workers = self.employer_network.number_of_nodes()
+        elif union_network_loaded and self.union_network is not None:
+            num_workers = self.union_network.number_of_nodes()  # This is only for legacy support
+        else:
+            num_workers = self.settings.get('num_workers', num_workers)
+        
+        # If random networks are needed, generate them now with correct num_workers
+        if self.employer_network is None:
+            self.employer_network = self.generate_employer_network()
+        if self.union_network is None:
+            density = self.settings.get('department_density', 0.3)  # Use department_density as union density
+            self.union_network = self.generate_union_network(
+                num_workers=num_workers,
+                density=density,
+                bargaining_committee_size=bargaining_committee_size,
+                team_density=team_density
+            )
+        
+        # Create workers based on determined number
         for i in range(num_workers):
             worker = Worker(
                 id=i,
@@ -329,13 +424,9 @@ class StrikeSimulation:
             strike_pay_policy=self.settings.get('strike_pay_policy', 'fixed')
         )
         
-        # Generate networks
-        self.employer_network = self.generate_employer_network()
-        self.union_network = self.generate_union_network()
-        
         # Set initial strike state
         for worker in self.workers:
-            if random.random() < initial_strike_participation_rate:
+            if worker.morale > participation_threshold:
                 worker.state = 'striking'
             else:
                 worker.state = 'not_striking'
@@ -343,34 +434,35 @@ class StrikeSimulation:
     def calculate_private_morale(self, worker: Worker, morale_spec: str = 'sigmoid') -> float:
         """Calculate worker's private morale based on financial position and target wage"""
         wage_gap = (worker.target_wage - worker.current_wage) / worker.current_wage
-        savings_change = (worker.net_earnings - worker.savings) / max(worker.savings, 1.0)
+        savings_change = (worker.net_earnings - worker.savings) / (worker.initial_wage * max(self.day_count, 1))
         
         if morale_spec == 'sigmoid':
             # Sigmoid specification from the paper - fixed implementation
-            alpha, beta, gamma = 1.0, 1.0, 0.5  # These could be made configurable
+            def calibrate_sigmoid(target, reference):
+                return -(1/reference)*np.log((1-target)/target)
+            alpha = calibrate_sigmoid(self.settings.get('inflation', 0.05), 0.9)
+            beta = calibrate_sigmoid(self.settings.get('belt_tightening', -0.2),0.1)
+            gamma = self.settings.get('sigmoid_gamma', 1)
             
-            # Wage factor: higher when current wage is closer to target wage
-            wage_factor = alpha / (1 + np.exp(-wage_gap * 10))  # Positive wage gap increases morale
-            
-            # Savings factor: higher when net earnings are positive relative to initial savings
-            savings_factor = beta / (1 + np.exp(-savings_change * 5))  # Positive savings change increases morale
-            
-            # Previous morale factor
+            # Factors
+            wage_factor = 0.1 / (1 + np.exp(-wage_gap * alpha))  # Positive wage gap increases morale
+            savings_factor = 0.1 / (1 + np.exp(-savings_change * beta))  # Positive savings change increases morale
             previous_morale = gamma * worker.morale
             
             # Combine factors - ensure result is between 0 and 1
-            combined_morale = wage_factor * savings_factor * previous_morale
+            combined_morale = (wage_factor + savings_factor + previous_morale) / 3
             return max(0.0, min(1.0, combined_morale))
             
         elif morale_spec == 'linear':
             # Linear specification
-            alpha, beta, gamma = 0.3, 0.3, 0.4
+            phi = self.settings.get('linear_phi', 0.3)
+            alpha, beta, gamma = self.settings.get('linear_alpha', 0.3), self.settings.get('linear_beta', 0.3), self.settings.get('linear_gamma', 0.4)
             linear_morale = alpha * wage_gap + beta * savings_change + gamma * worker.morale
-            return max(0.0, min(1.0, linear_morale))
+            return 1 / (1 + np.exp(-phi * linear_morale))
             
         else:  # 'no_motivation'
             # No motivation specification
-            alpha, beta, gamma = 0.5, 0.3, 0.2
+            alpha, beta, gamma = self.settings.get('no_motivation_alpha', 0.5), self.settings.get('no_motivation_beta', 0.3), self.settings.get('no_motivation_gamma', 0.2)
             no_motivation_morale = alpha * wage_gap * (beta * worker.morale + gamma * savings_change)
             return max(0.0, min(1.0, no_motivation_morale))
     
@@ -403,8 +495,8 @@ class StrikeSimulation:
         social_morale = self.calculate_social_morale(worker)
         
         # Combine private and social morale (alpha and beta weights)
-        alpha = self.settings.get('private_morale_alpha', 0.7)
-        beta = self.settings.get('social_morale_beta', 0.3)
+        alpha = self.settings.get('private_morale_alpha', 0.9)
+        beta = self.settings.get('social_morale_beta', 0.1)
         
         # If no social connections, rely more on private morale
         if social_morale == 0.0:

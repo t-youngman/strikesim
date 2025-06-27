@@ -13,6 +13,7 @@ StrikeSim generates random networks representing the internal structures of unio
 - **Financial Flows**: Complete tracking of wages, strike pay, union dues, and employer revenue
 - **Morale System**: Three different morale specifications (sigmoid, linear, no-motivation)
 - **Policy Simulation**: Union and employer policy changes during strikes
+- **Network Loading**: Support for loading pre-defined networks from .gexf files
 - **Data Export**: HDF5 and CSV export for analysis
 - **Visualization**: Network and time series visualizations
 - **Monte Carlo**: Support for multiple simulation runs with different random networks
@@ -78,6 +79,7 @@ Modify `settings.py` to adjust model parameters:
 
 - **Employer Network**: Hierarchical structure (executive → department → team)
 - **Union Network**: Bargaining committee and worker connections with configurable density
+- **Network Loading**: Option to load pre-defined networks from .gexf files in `networks/employers/` and `networks/unions/` directories
 
 ### Financial Flows
 
@@ -96,6 +98,37 @@ Three specifications implemented:
 3. **No-Motivation**: Simplified specification
 
 Morale combines private factors (financial position) with social factors (network interactions).
+
+### Network Configuration
+
+The model supports two ways to define networks:
+
+1. **Generated Networks** (default): Random networks generated based on parameters in `settings.py`
+2. **Loaded Networks**: Pre-defined networks loaded from .gexf files
+
+To use pre-defined networks, modify `settings.py`:
+
+```python
+# Set to None to use generated networks (default)
+employer_network_file = None  # e.g., 'defra' to load networks/employers/defra.gexf
+union_network_file = None     # e.g., 'union_network' to load networks/unions/union_network.gexf
+
+# Or specify network files:
+employer_network_file = 'defra'  # Loads networks/employers/defra.gexf
+union_network_file = 'my_union'  # Loads networks/unions/my_union.gexf
+```
+
+The model will automatically fall back to generated networks if the specified files don't exist.
+
+### Testing Network Loading
+
+Run the test script to verify network loading functionality:
+
+```bash
+python test_network_loading.py
+```
+
+This will show available network files and test different loading scenarios.
 
 ## Output Files
 
