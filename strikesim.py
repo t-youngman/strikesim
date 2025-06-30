@@ -286,18 +286,34 @@ class StrikeSimulation:
         return G
     
     def load_employer_network(self, filename: str) -> nx.Graph:
-        """Load employer network from .gexf file"""
+        """Load employer network from .gexf or .csv file"""
         try:
-            filepath = os.path.join('networks', 'employers', filename)
-            if not filename.endswith('.gexf'):
-                filepath += '.gexf'
+            # Try to find the file with different extensions
+            base_path = os.path.join('networks', 'employers', filename)
             
-            if not os.path.exists(filepath):
-                raise FileNotFoundError(f"Employer network file not found: {filepath}")
+            # Check for .gexf file first
+            gexf_path = base_path if filename.endswith('.gexf') else base_path + '.gexf'
+            if os.path.exists(gexf_path):
+                G = nx.read_gexf(gexf_path)
+                print(f"Loaded employer network from {gexf_path} with {G.number_of_nodes()} nodes and {G.number_of_edges()} edges")
+                return G
             
-            G = nx.read_gexf(filepath)
-            print(f"Loaded employer network from {filepath} with {G.number_of_nodes()} nodes and {G.number_of_edges()} edges")
-            return G
+            # Check for .csv file
+            csv_path = base_path if filename.endswith('.csv') else base_path + '.csv'
+            if os.path.exists(csv_path):
+                # Read CSV edge list
+                edges_df = pd.read_csv(csv_path)
+                
+                # Check if the CSV has the expected format
+                if 'From' in edges_df.columns and 'To' in edges_df.columns:
+                    G = nx.from_pandas_edgelist(edges_df, source='From', target='To', create_using=nx.Graph())
+                    print(f"Loaded employer network from {csv_path} with {G.number_of_nodes()} nodes and {G.number_of_edges()} edges")
+                    return G
+                else:
+                    raise ValueError(f"CSV file {csv_path} does not have expected 'From' and 'To' columns")
+            
+            # If neither file exists, raise FileNotFoundError
+            raise FileNotFoundError(f"Employer network file not found: {base_path} (tried .gexf and .csv extensions)")
             
         except Exception as e:
             print(f"Error loading employer network from {filename}: {e}")
@@ -305,18 +321,34 @@ class StrikeSimulation:
             return self.generate_employer_network()
     
     def load_union_network(self, filename: str) -> nx.Graph:
-        """Load union network from .gexf file"""
+        """Load union network from .gexf or .csv file"""
         try:
-            filepath = os.path.join('networks', 'unions', filename)
-            if not filename.endswith('.gexf'):
-                filepath += '.gexf'
+            # Try to find the file with different extensions
+            base_path = os.path.join('networks', 'unions', filename)
             
-            if not os.path.exists(filepath):
-                raise FileNotFoundError(f"Union network file not found: {filepath}")
+            # Check for .gexf file first
+            gexf_path = base_path if filename.endswith('.gexf') else base_path + '.gexf'
+            if os.path.exists(gexf_path):
+                G = nx.read_gexf(gexf_path)
+                print(f"Loaded union network from {gexf_path} with {G.number_of_nodes()} nodes and {G.number_of_edges()} edges")
+                return G
             
-            G = nx.read_gexf(filepath)
-            print(f"Loaded union network from {filepath} with {G.number_of_nodes()} nodes and {G.number_of_edges()} edges")
-            return G
+            # Check for .csv file
+            csv_path = base_path if filename.endswith('.csv') else base_path + '.csv'
+            if os.path.exists(csv_path):
+                # Read CSV edge list
+                edges_df = pd.read_csv(csv_path)
+                
+                # Check if the CSV has the expected format
+                if 'From' in edges_df.columns and 'To' in edges_df.columns:
+                    G = nx.from_pandas_edgelist(edges_df, source='From', target='To', create_using=nx.Graph())
+                    print(f"Loaded union network from {csv_path} with {G.number_of_nodes()} nodes and {G.number_of_edges()} edges")
+                    return G
+                else:
+                    raise ValueError(f"CSV file {csv_path} does not have expected 'From' and 'To' columns")
+            
+            # If neither file exists, raise FileNotFoundError
+            raise FileNotFoundError(f"Union network file not found: {base_path} (tried .gexf and .csv extensions)")
             
         except Exception as e:
             print(f"Error loading union network from {filename}: {e}")
@@ -327,21 +359,68 @@ class StrikeSimulation:
         """Get list of available network files"""
         networks = {'employers': [], 'unions': []}
         
-        # Get employer networks
-        employer_path = os.path.join('networks', 'employers', '*.gexf')
-        employer_files = glob.glob(employer_path)
-        networks['employers'] = [os.path.basename(f).replace('.gexf', '') for f in employer_files]
+        # Get employer networks (both .gexf and .csv)
+        employer_gexf_path = os.path.join('networks', 'employers', '*.gexf')
+        employer_csv_path = os.path.join('networks', 'employers', '*.csv')
+        employer_gexf_files = glob.glob(employer_gexf_path)
+        employer_csv_files = glob.glob(employer_csv_path)
         
-        # Get union networks
-        union_path = os.path.join('networks', 'unions', '*.gexf')
-        union_files = glob.glob(union_path)
-        networks['unions'] = [os.path.basename(f).replace('.gexf', '') for f in union_files]
+        # Combine and remove extensions
+        employer_files = employer_gexf_files + employer_csv_files
+        networks['employers'] = [os.path.basename(f).replace('.gexf', '').replace('.csv', '') for f in employer_files]
+        
+        # Get union networks (both .gexf and .csv)
+        union_gexf_path = os.path.join('networks', 'unions', '*.gexf')
+        union_csv_path = os.path.join('networks', 'unions', '*.csv')
+        union_gexf_files = glob.glob(union_gexf_path)
+        union_csv_files = glob.glob(union_csv_path)
+        
+        # Combine and remove extensions
+        union_files = union_gexf_files + union_csv_files
+        networks['unions'] = [os.path.basename(f).replace('.gexf', '').replace('.csv', '') for f in union_files]
         
         return networks
     
     def is_working_day(self, date: datetime) -> bool:
         """Check if a given date is a working day"""
         return date.strftime('%A') in self.working_days
+    
+    def is_strike_day(self, date: datetime) -> bool:
+        """Check if a given date is a strike day based on the strike pattern"""
+        strike_pattern = self.settings.get('strike_pattern', 'indefinite')
+        
+        if strike_pattern == 'indefinite':
+            # Every working day is a potential strike day
+            return self.is_working_day(date)
+        
+        elif strike_pattern == 'once_a_week':
+            # Strike on Monday (first day of week)
+            return date.strftime('%A') == 'Monday' and self.is_working_day(date)
+        
+        elif strike_pattern == 'once_per_month':
+            # Strike on the 1st of each month
+            return date.day == 1 and self.is_working_day(date)
+        
+        elif strike_pattern == 'weekly_escalation':
+            # Escalating strike days per week
+            start_day = self.settings.get('weekly_escalation_start', 1)
+            days_since_start = (date - self.start_date).days
+            week_number = days_since_start // 7
+            strike_days_this_week = min(5, start_day + week_number)  # Cap at 5 days
+            
+            # Calculate which days of the week are strike days
+            week_start = date - timedelta(days=date.weekday())
+            strike_dates = []
+            for i in range(strike_days_this_week):
+                strike_date = week_start + timedelta(days=i)
+                if self.is_working_day(strike_date):
+                    strike_dates.append(strike_date.date())
+            
+            return date.date() in strike_dates
+        
+        else:
+            # Default to indefinite
+            return self.is_working_day(date)
     
     def get_next_working_day(self, date: datetime) -> datetime:
         """Get the next working day from a given date"""
@@ -571,12 +650,21 @@ class StrikeSimulation:
             self.current_date += timedelta(days=1)
             return 'weekend'
         
+        # Check if this is a strike day based on the pattern
+        is_strike_day = self.is_strike_day(self.current_date)
+        
         # Update worker morale
         for worker in self.workers:
             self.update_worker_morale(worker)
         
-        # Process participation decisions
-        self.process_participation_decisions()
+        # Process participation decisions only on strike days
+        if is_strike_day:
+            self.process_participation_decisions()
+        else:
+            # On non-strike days, all workers work
+            for worker in self.workers:
+                if worker.state in ['striking', 'not_striking']:
+                    worker.state = 'not_striking'
         
         # Process financial flows
         self.process_daily_financial_flows()

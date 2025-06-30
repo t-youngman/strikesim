@@ -5,6 +5,10 @@ start_date = '2025-01-01'
 duration = 100 #in days
 working_days = {'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'}
 
+#strike pattern settings
+strike_pattern = 'indefinite'  # 'indefinite', 'once_a_week', 'once_per_month', 'weekly_escalation'
+weekly_escalation_start = 1  # Starting number of days for weekly escalation
+
 #employer policy
 concession_policy = 'none'
 retaliation_policy = 'none'
@@ -21,7 +25,7 @@ num_workers = 50
 initial_wage = 100.0
 target_wage = 105.0  # Higher target wage for more motivation
 initial_savings_range = (500.0, 2000.0)  # Higher initial savings
-initial_morale_range = (0.0, 0.1)  # Higher initial morale
+initial_morale_range = (0.0, 1.0)  # Higher initial morale
 daily_expenditure_rate = 0.95  # Daily expenses as fraction of daily wage (1.0 = full daily wage)
 
 #financial parameters
