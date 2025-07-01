@@ -54,11 +54,11 @@ with st.sidebar.expander("🌐 Workplace Networks", expanded=False):
     # Union network parameters (show only if random)
     if union_network_choice == 'random':
         bargaining_committee_size = st.slider("Union bargaining committee size", 1, 10, settings.bargaining_committee_size)
-        department_density = st.slider("Union density (fraction of workers)", 0.0, 1.0, settings.department_density)
+        steward_percentage = st.slider("Union steward percentage", 0.01, 0.5, settings.steward_percentage, help="Fraction of workers who are union stewards (well-connected leaders)")
         team_density = st.slider("Union team density", 0.0, 1.0, settings.team_density)
     else:
         bargaining_committee_size = None
-        department_density = None
+        steward_percentage = None
         team_density = None
 
 # --- Worker Settings (Accordion) ---
@@ -181,7 +181,7 @@ else:
 
 if union_network_choice == 'random':
     settings_dict['bargaining_committee_size'] = bargaining_committee_size
-    settings_dict['department_density'] = department_density
+    settings_dict['steward_percentage'] = steward_percentage
     settings_dict['team_density'] = team_density
     settings_dict['union_network_file'] = None
 else:
@@ -330,6 +330,56 @@ if st.session_state.simulation_results is not None:
         st.write("**Monthly strikes:** Every 1st of the month (if it's a working day)")
     else:
         st.write("**Indefinite strikes:** Workers can strike on any working day based on their morale")
+
+    # --- Network Visualizations ---
+    st.subheader("🌐 Network Visualizations")
+    st.markdown("""
+    Visual representation of the employer and union networks at the beginning and end of the simulation.
+    Node colors indicate worker states: 🔴 Striking, 🔵 Working, 🟠 Union Committee, 🟢 Manager
+    """)
+    
+    # Check if we have worker states data
+    if results['worker_states'] and len(results['worker_states']) > 0:
+        # Create visualizations for first and final timesteps
+        first_timestep = 0
+        final_timestep = len(results['worker_states']) - 1
+        
+        # First timestep visualization
+        st.markdown("### 📊 First Timestep (Day 0)")
+        try:
+            fig_first = sim.visualize_networks_at_timestep(first_timestep)
+            if fig_first:
+                st.pyplot(fig_first)
+                plt.close(fig_first)
+            else:
+                st.warning("Could not generate first timestep visualization")
+        except Exception as e:
+            st.error(f"Error generating first timestep visualization: {e}")
+        
+        # Final timestep visualization
+        st.markdown("### 📊 Final Timestep (Day {})".format(final_timestep))
+        try:
+            fig_final = sim.visualize_networks_at_timestep(final_timestep)
+            if fig_final:
+                st.pyplot(fig_final)
+                plt.close(fig_final)
+            else:
+                st.warning("Could not generate final timestep visualization")
+        except Exception as e:
+            st.error(f"Error generating final timestep visualization: {e}")
+        
+        # Add explanation of the visualizations
+        st.markdown("""
+        **Network Visualization Guide:**
+        - **Left panel (Union Network):** Shows union membership and committee structure
+        - **Right panel (Employer Network):** Shows organizational hierarchy and reporting relationships
+        - **Node sizes:** Managers are slightly larger than regular workers
+        - **Node colors:** Red = Striking, Blue = Working, Orange = Union Committee
+        - **Edges:** Represent social/organizational connections that influence morale spread
+        """)
+        
+    else:
+        st.warning("No worker state data available for network visualization")
 
     # --- Download Results ---
     st.subheader("Download Results")

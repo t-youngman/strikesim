@@ -40,7 +40,7 @@ team_size = 8
 
 #union network
 bargaining_committee_size = 3
-department_density = 0.5  # Higher density
+steward_percentage = 0.1  # 10% of workers are union stewards
 team_density = 0.7  # Higher density
 
 #network file loading (set to None to use generated networks, or specify filename without .gexf extension)

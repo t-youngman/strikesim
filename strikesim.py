@@ -281,16 +281,24 @@ class StrikeSimulation:
         
         return G
     
-    def generate_union_network(self, num_workers: int, density: float = 0.3,
+    def generate_union_network(self, num_workers: int, steward_percentage: float = 0.1,
                               bargaining_committee_size: int = 3,
                               team_density: float = 0.5,
                               manager_union_probability: float = 0.4) -> nx.Graph:
-        """Generate union network with workers and managers as potential union members."""
+        """Generate union network with workers and managers as potential union members.
+        
+        Args:
+            num_workers: Total number of workers
+            steward_percentage: Fraction of workers who are union stewards (well-connected)
+            bargaining_committee_size: Number of bargaining committee members
+            team_density: Probability of connections between regular union members
+            manager_union_probability: Probability that managers join the union
+        """
         G = nx.Graph()
         
-        # Determine union members from all workers (including managers)
-        num_union_members = max(1, int(density * num_workers))
-        union_member_ids = sorted(random.sample(range(num_workers), num_union_members))
+        # Determine union stewards (well-connected union leaders)
+        num_stewards = max(1, int(steward_percentage * num_workers))
+        steward_ids = sorted(random.sample(range(num_workers), num_stewards))
         
         # Create bargaining committee (committee IDs are negative to avoid collision)
         committee = list(range(-1, -1 - bargaining_committee_size, -1))
@@ -303,22 +311,43 @@ class StrikeSimulation:
                 if i != j:
                     G.add_edge(i, j)
         
-        # Add union members and connect to committee
-        for i in union_member_ids:
-            # Check if this worker is a manager (first few workers are managers in employer network)
-            is_manager = i < 8  # Assuming first 8 workers are managers (3 exec + 5 dept)
+        # Add stewards and connect them to committee and each other
+        for i in steward_ids:
+            G.add_node(i, level='steward', type='worker', is_steward=True)
             
-            G.add_node(i, level='worker', type='worker', is_manager=is_manager)
-            
-            # Connect some union members to committee
-            if random.random() < 0.2 and committee:
+            # Connect stewards to bargaining committee
+            if committee:
                 committee_member = random.choice(committee)
                 G.add_edge(i, committee_member)
             
-            # Connect union members to each other based on team_density
-            for j in union_member_ids:
-                if i < j and random.random() < team_density:
+            # Connect stewards to each other (fully connected steward network)
+            for j in steward_ids:
+                if i < j:
                     G.add_edge(i, j)
+        
+        # Add regular union members (non-stewards)
+        for i in range(num_workers):
+            if i not in steward_ids:  # Skip stewards (already added)
+                union_member_prob = 0.7 
+                
+                if random.random() < union_member_prob:
+                    G.add_node(i, level='worker', type='worker', is_steward=False)
+                    
+                    # Connect some regular members to committee
+                    if random.random() < 0.1 and committee:  # Lower probability than stewards
+                        committee_member = random.choice(committee)
+                        G.add_edge(i, committee_member)
+                    
+                    # Connect regular members to stewards (stewards are key connectors)
+                    for steward_id in steward_ids:
+                        if random.random() < 0.3:  # 30% chance to connect to each steward
+                            G.add_edge(i, steward_id)
+                    
+                    # Connect regular members to each other based on team_density
+                    for j in range(i + 1, num_workers):
+                        if j not in steward_ids and G.has_node(j):  # Only connect to other regular members
+                            if random.random() < team_density:
+                                G.add_edge(i, j)
         
         return G
     
@@ -481,7 +510,7 @@ class StrikeSimulation:
         initial_strike_fund = self.settings.get('initial_strike_fund', initial_strike_fund)
         initial_morale_range = self.settings.get('initial_morale_range', (0.5, 0.8))
         initial_savings_range = self.settings.get('initial_savings_range', (0.0, 1000.0))
-        department_density = self.settings.get('department_density', 0.3)
+        steward_percentage = self.settings.get('steward_percentage', 0.1)
         team_density = self.settings.get('team_density', 0.5)
         bargaining_committee_size = self.settings.get('bargaining_committee_size', 3)
         
@@ -515,10 +544,9 @@ class StrikeSimulation:
         if self.employer_network is None:
             self.employer_network = self.generate_employer_network(num_workers=num_workers)
         if self.union_network is None:
-            density = self.settings.get('department_density', 0.3)  # Use department_density as union density
             self.union_network = self.generate_union_network(
                 num_workers=num_workers,
-                density=density,
+                steward_percentage=steward_percentage,
                 bargaining_committee_size=bargaining_committee_size,
                 team_density=team_density
             )
@@ -1027,14 +1055,31 @@ class StrikeSimulation:
         
         for node in self.union_network.nodes():
             if node < len(worker_states):  # Worker node
+                # Check if this is a steward
+                is_steward = self.union_network.nodes[node].get('is_steward', False)
+                
                 if worker_states[node] == 'striking':
-                    node_colors_union.append('#ff4444')  # Bright red
+                    if is_steward:
+                        node_colors_union.append('#ff0000')  # Dark red for striking stewards
+                        node_sizes_union.append(600)
+                        node_labels_union[node] = f'S{node}'
+                    else:
+                        node_colors_union.append('#ff4444')  # Bright red for striking workers
+                        node_sizes_union.append(400)
+                        node_labels_union[node] = f'W{node}'
                 elif worker_states[node] == 'not_striking':
-                    node_colors_union.append('#4444ff')  # Bright blue
+                    if is_steward:
+                        node_colors_union.append('#0000ff')  # Dark blue for working stewards
+                        node_sizes_union.append(600)
+                        node_labels_union[node] = f'S{node}'
+                    else:
+                        node_colors_union.append('#4444ff')  # Bright blue for working workers
+                        node_sizes_union.append(400)
+                        node_labels_union[node] = f'W{node}'
                 else:
                     node_colors_union.append('#888888')  # Gray
-                node_sizes_union.append(400)
-                node_labels_union[node] = f'W{node}'
+                    node_sizes_union.append(400)
+                    node_labels_union[node] = f'W{node}'
             else:  # Committee node
                 node_colors_union.append('#ffaa00')  # Orange
                 node_sizes_union.append(600)
@@ -1048,6 +1093,10 @@ class StrikeSimulation:
         
         # Add legend for union network
         legend_elements = [
+            plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='#ff0000', 
+                      markersize=15, label='Striking Steward'),
+            plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='#0000ff', 
+                      markersize=15, label='Working Steward'),
             plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='#ff4444', 
                       markersize=15, label='Striking Worker'),
             plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='#4444ff', 
