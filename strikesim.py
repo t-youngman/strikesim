@@ -220,30 +220,61 @@ class StrikeSimulation:
             'worker_states': []  # Track each worker's state at each timestep
         }
         
-    def generate_employer_network(self, executive_size: int = 3, 
-                                 department_size: int = 5, 
-                                 team_size: int = 8) -> nx.Graph:
-        """Generate hierarchical employer network"""
+    def generate_employer_network(self, num_workers: int = None, 
+                                 executive_size: int = None, 
+                                 department_size: int = None, 
+                                 team_size: int = None) -> nx.Graph:
+        """Generate hierarchical employer network where managers are also workers"""
         G = nx.Graph()
         
-        # Create executive level
+        # If num_workers is specified, calculate appropriate sizes
+        if num_workers is not None:
+            if num_workers < 3:
+                # Very small organization: all workers are executives
+                executive_size = num_workers
+                department_size = 0
+                team_size = 0
+            elif num_workers < 8:
+                # Small organization: executives + some departments
+                executive_size = max(1, num_workers // 3)
+                department_size = num_workers - executive_size
+                team_size = 0
+            else:
+                # Larger organization: executives + departments + teams
+                executive_size = max(1, num_workers // 8)  # ~12.5% executives
+                department_size = max(1, num_workers // 4)  # ~25% departments
+                team_size = num_workers - executive_size - department_size
+        else:
+            # Use default values if not specified
+            executive_size = executive_size or 3
+            department_size = department_size or 5
+            team_size = team_size or 8
+        
+        # Ensure we don't exceed the specified number of workers
+        total_workers = executive_size + department_size + team_size
+        if num_workers is not None and total_workers > num_workers:
+            # Adjust team size to fit
+            team_size = max(0, num_workers - executive_size - department_size)
+            total_workers = executive_size + department_size + team_size
+        
+        # Create executive level (managers who are also workers)
         executives = list(range(executive_size))
         for i in executives:
-            G.add_node(i, level='executive', type='executive')
+            G.add_node(i, level='executive', type='worker', is_manager=True)
         
-        # Create department level
+        # Create department level (managers who are also workers)
         departments = list(range(executive_size, executive_size + department_size))
         for i in departments:
-            G.add_node(i, level='department', type='department')
+            G.add_node(i, level='department', type='worker', is_manager=True)
             # Connect to executives
             for j in executives:
                 G.add_edge(i, j)
         
-        # Create team level
+        # Create team level (regular workers)
         teams = list(range(executive_size + department_size, 
                           executive_size + department_size + team_size))
         for i in teams:
-            G.add_node(i, level='team', type='team')
+            G.add_node(i, level='team', type='worker', is_manager=False)
             # Connect to departments
             for j in departments:
                 G.add_edge(i, j)
@@ -252,11 +283,12 @@ class StrikeSimulation:
     
     def generate_union_network(self, num_workers: int, density: float = 0.3,
                               bargaining_committee_size: int = 3,
-                              team_density: float = 0.5) -> nx.Graph:
-        """Generate union network with only union members as nodes, based on density."""
+                              team_density: float = 0.5,
+                              manager_union_probability: float = 0.4) -> nx.Graph:
+        """Generate union network with workers and managers as potential union members."""
         G = nx.Graph()
         
-        # Determine union members
+        # Determine union members from all workers (including managers)
         num_union_members = max(1, int(density * num_workers))
         union_member_ids = sorted(random.sample(range(num_workers), num_union_members))
         
@@ -273,11 +305,16 @@ class StrikeSimulation:
         
         # Add union members and connect to committee
         for i in union_member_ids:
-            G.add_node(i, level='worker', type='worker')
+            # Check if this worker is a manager (first few workers are managers in employer network)
+            is_manager = i < 8  # Assuming first 8 workers are managers (3 exec + 5 dept)
+            
+            G.add_node(i, level='worker', type='worker', is_manager=is_manager)
+            
             # Connect some union members to committee
             if random.random() < 0.2 and committee:
                 committee_member = random.choice(committee)
                 G.add_edge(i, committee_member)
+            
             # Connect union members to each other based on team_density
             for j in union_member_ids:
                 if i < j and random.random() < team_density:
@@ -476,7 +513,7 @@ class StrikeSimulation:
         
         # If random networks are needed, generate them now with correct num_workers
         if self.employer_network is None:
-            self.employer_network = self.generate_employer_network()
+            self.employer_network = self.generate_employer_network(num_workers=num_workers)
         if self.union_network is None:
             density = self.settings.get('department_density', 0.3)  # Use department_density as union density
             self.union_network = self.generate_union_network(
@@ -554,24 +591,66 @@ class StrikeSimulation:
             return max(0.0, min(1.0, no_motivation_morale))
     
     def calculate_social_morale(self, worker: Worker) -> float:
-        """Calculate social morale based on network interactions"""
-        if not self.union_network.has_node(worker.id):
-            return 0.0
-            
-        # Get connected workers
-        neighbors = list(self.union_network.neighbors(worker.id))
-        if not neighbors:
-            return 0.0
-            
-        # Calculate average morale of connected workers
-        neighbor_morales = []
-        for neighbor_id in neighbors:
-            if neighbor_id < len(self.workers):
-                neighbor_morales.append(self.workers[neighbor_id].morale)
+        """Calculate social morale based on network interactions with strike day logic"""
+        # Check if this is a strike day
+        is_strike_day = self.is_strike_day(self.current_date)
         
-        if neighbor_morales:
-            return np.mean(neighbor_morales)
-        return 0.0
+        union_influence = 0.0
+        employer_influence = 0.0
+        
+        # Union network influence
+        if self.union_network.has_node(worker.id):
+            union_neighbors = list(self.union_network.neighbors(worker.id))
+            union_morales = []
+            for neighbor_id in union_neighbors:
+                if neighbor_id < len(self.workers):  # Worker node
+                    neighbor_worker = self.workers[neighbor_id]
+                    # On strike days, only consider non-striking workers for union influence
+                    # (striking workers are excluded from employer network)
+                    if is_strike_day and neighbor_worker.state == 'striking':
+                        continue
+                    union_morales.append(neighbor_worker.morale)
+                elif neighbor_id < 0:  # Committee node - always influential
+                    # Committee members have high morale (pro-strike)
+                    union_morales.append(0.8)  # High pro-strike morale
+            
+            if union_morales:
+                union_influence = np.mean(union_morales)
+        
+        # Employer network influence
+        if self.employer_network.has_node(worker.id):
+            employer_neighbors = list(self.employer_network.neighbors(worker.id))
+            employer_morales = []
+            
+            for neighbor_id in employer_neighbors:
+                if neighbor_id < len(self.workers):  # Worker node (including managers)
+                    neighbor_worker = self.workers[neighbor_id]
+                    # On strike days, exclude striking workers from employer network influence
+                    if is_strike_day and neighbor_worker.state == 'striking':
+                        continue
+                    employer_morales.append(neighbor_worker.morale)
+                # Note: No more separate management nodes - managers are now workers
+            
+            if employer_morales:
+                employer_influence = np.mean(employer_morales)
+        
+        # Combine influences based on day type
+        if is_strike_day:
+            # On strike days: union influence for all union members, employer influence for non-striking workers
+            if union_influence > 0 and employer_influence > 0:
+                # Worker is influenced by both networks (union member not striking)
+                return (union_influence + employer_influence) / 2
+            elif union_influence > 0:
+                # Worker only influenced by union network
+                return union_influence
+            elif employer_influence > 0:
+                # Worker only influenced by employer network (non-union member)
+                return employer_influence
+            else:
+                return 0.0
+        else:
+            # On work days: only employer network influence
+            return employer_influence
     
     def update_worker_morale(self, worker: Worker, morale_spec: str = None):
         """Update worker's morale based on private and social factors"""
@@ -587,7 +666,7 @@ class StrikeSimulation:
         
         # If no social connections, rely more on private morale
         if social_morale == 0.0:
-            alpha, beta = 0.9, 0.1
+            alpha, beta = 0.95, 0.05  # Even more weight on private morale when no social influence
         
         new_morale = (alpha * private_morale + beta * social_morale) / (alpha + beta)
         
@@ -987,19 +1066,22 @@ class StrikeSimulation:
         node_labels_employer = {}
         
         for node in self.employer_network.nodes():
-            if node < len(worker_states):  # Worker node
+            if node < len(worker_states):  # Worker node (including managers)
                 if worker_states[node] == 'striking':
                     node_colors_employer.append('#ff4444')  # Bright red
                 elif worker_states[node] == 'not_striking':
                     node_colors_employer.append('#4444ff')  # Bright blue
                 else:
                     node_colors_employer.append('#888888')  # Gray
-                node_sizes_employer.append(400)
-                node_labels_employer[node] = f'W{node}'
-            else:  # Management node
-                node_colors_employer.append('#44ff44')  # Bright green
-                node_sizes_employer.append(600)
-                node_labels_employer[node] = f'M{node}'
+                
+                # Check if this is a manager (first 8 workers are managers)
+                is_manager = node < 8
+                if is_manager:
+                    node_sizes_employer.append(500)  # Slightly larger for managers
+                    node_labels_employer[node] = f'M{node}'
+                else:
+                    node_sizes_employer.append(400)
+                    node_labels_employer[node] = f'W{node}'
         
         nx.draw(self.employer_network, pos_employer, ax=ax2,
                 node_color=node_colors_employer, node_size=node_sizes_employer,
@@ -1013,8 +1095,10 @@ class StrikeSimulation:
                       markersize=15, label='Striking Worker'),
             plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='#4444ff', 
                       markersize=15, label='Working Worker'),
-            plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='#44ff44', 
-                      markersize=15, label='Management')
+            plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='#4444ff', 
+                      markersize=18, label='Manager (Working)'),
+            plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='#ff4444', 
+                      markersize=18, label='Manager (Striking)')
         ]
         ax2.legend(handles=legend_elements, loc='upper right', fontsize=10)
         
