@@ -134,7 +134,7 @@ with st.sidebar.expander("⚙️ Simulation Settings", expanded=False):
     duration = st.slider("Simulation duration (days)", 10, 365, settings.duration)
 
 # --- Calendar Settings (Accordion) ---
-with st.sidebar.expander("📅 Calendar & Strike Patterns", expanded=False):
+with st.sidebar.expander("📅 Strike Calendar", expanded=False):
     # Start date picker
     start_date = st.date_input(
         "Start Date",
