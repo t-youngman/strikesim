@@ -41,25 +41,72 @@ with st.sidebar.expander("🌐 Workplace Networks", expanded=False):
 
     # Employer network parameters (show only if random)
     if employer_network_choice == 'random':
-        num_workers = st.slider("Number of workers", 10, 200, settings.num_workers)
-        executive_size = st.slider("Employer executive size", 1, 10, settings.executive_size)
-        department_size = st.slider("Employer department size", 1, 20, settings.department_size)
-        team_size = st.slider("Employer team size", 1, 50, settings.team_size)
+        # University network parameters - only lab group and size parameters
+        st.markdown("**University Network Parameters:**")
+        col1, col2 = st.columns(2)
+        with col1:
+            lab_size_n = st.slider("Lab size parameter n", 1, 10, settings.lab_size_n, 
+                                 help="Negative binomial parameter n for lab group sizes")
+            lab_size_prob = st.slider("Lab size probability", 0.1, 0.9, settings.lab_size_prob, step=0.1,
+                                    help="Negative binomial parameter p for lab group sizes")
+        with col2:
+            num_departments = st.slider("Number of departments", 2, 15, settings.num_departments,
+                                      help="Number of departments to generate")
+            avg_department_size = st.slider("Average department size", 5, 50, settings.avg_department_size,
+                                          help="Average number of people per department")
+        
+        # Calculate expected number of workers based on department parameters
+        try:
+            import sys
+            import os
+            sys.path.append(os.path.join(os.path.dirname(__file__), 'networks'))
+            from UniversityNetwork import calculate_expected_workers
+            
+            expected_workers = calculate_expected_workers(
+                num_departments=num_departments,
+                avg_department_size=avg_department_size
+            )
+            
+            # Display the calculated number of workers
+            st.info(f"📊 **Expected number of workers:** {expected_workers} (calculated from {num_departments} departments × ~{avg_department_size} people each)")
+            num_workers = expected_workers
+            
+        except ImportError:
+            # Fallback if UniversityNetwork module not available
+            st.warning("⚠️ Could not import UniversityNetwork module. Using default number of workers.")
+            num_workers = st.slider("Number of workers", 10, 200, settings.num_workers)
+        
+        # Use default values for other parameters
+        total_friends_n = settings.total_friends_n
+        total_friends_prob = settings.total_friends_prob
+        lab_friends_prob = settings.lab_friends_prob
+        department_friends_prob = settings.department_friends_prob
+        university_friends_prob = settings.university_friends_prob
+
+    
     else:
         num_workers = None
-        executive_size = None
-        department_size = None
-        team_size = None
+        # University network parameters (not used when loading from file, but kept for consistency)
+        lab_size_n = settings.lab_size_n
+        lab_size_prob = settings.lab_size_prob
+        total_friends_n = settings.total_friends_n
+        total_friends_prob = settings.total_friends_prob
+        lab_friends_prob = settings.lab_friends_prob
+        department_friends_prob = settings.department_friends_prob
+        university_friends_prob = settings.university_friends_prob
+        num_departments = settings.num_departments
+        avg_department_size = settings.avg_department_size
+        # Hierarchical parameters not needed when loading from file
 
     # Union network parameters (show only if random)
     if union_network_choice == 'random':
         bargaining_committee_size = st.slider("Union bargaining committee size", 1, 10, settings.bargaining_committee_size)
         steward_percentage = st.slider("Union steward percentage", 0.01, 0.5, settings.steward_percentage, help="Fraction of workers who are union stewards (well-connected leaders)")
-        team_density = st.slider("Union team density", 0.0, 1.0, settings.team_density)
+        branch_connectedness = st.slider("Branch connectedness", 0.0, 1.0, settings.branch_connectedness, help="Probability of connecting to a regular member in the same branch")
     else:
         bargaining_committee_size = None
         steward_percentage = None
-        team_density = None
+        branch_connectedness = None
 
 # --- Worker Settings (Accordion) ---
 with st.sidebar.expander("👥 Worker Settings", expanded=True):
@@ -148,7 +195,6 @@ run_sim = st.sidebar.button("🚀 Run Simulation", type="primary")
 
 # --- Prepare settings dict ---
 settings_dict = dict(
-    num_workers=num_workers,
     initial_wage=initial_wage,
     target_wage=target_wage,
     initial_savings_range=(initial_savings_min, initial_savings_max),
@@ -168,13 +214,24 @@ settings_dict = dict(
     # Strike pattern settings
     strike_pattern=strike_pattern,
     weekly_escalation_start=weekly_escalation_start,
+    # University network parameters
+    lab_size_n=lab_size_n,
+    lab_size_prob=lab_size_prob,
+    total_friends_n=total_friends_n,
+    total_friends_prob=total_friends_prob,
+    lab_friends_prob=lab_friends_prob,
+    department_friends_prob=department_friends_prob,
+    university_friends_prob=university_friends_prob,
+    num_departments=num_departments,
+    avg_department_size=avg_department_size,
 )
 
-# Set network file or parameters in settings_dict
+# Add num_workers only if it's not None (i.e., when generating random networks)
+if num_workers is not None:
+    settings_dict['num_workers'] = num_workers
+
+# Set employer network file or parameters
 if employer_network_choice == 'random':
-    settings_dict['executive_size'] = executive_size
-    settings_dict['department_size'] = department_size
-    settings_dict['team_size'] = team_size
     settings_dict['employer_network_file'] = None
 else:
     settings_dict['employer_network_file'] = employer_network_choice
@@ -182,7 +239,7 @@ else:
 if union_network_choice == 'random':
     settings_dict['bargaining_committee_size'] = bargaining_committee_size
     settings_dict['steward_percentage'] = steward_percentage
-    settings_dict['team_density'] = team_density
+    settings_dict['branch_connectedness'] = branch_connectedness
     settings_dict['union_network_file'] = None
 else:
     settings_dict['union_network_file'] = union_network_choice
@@ -208,7 +265,7 @@ if st.session_state.simulation_results is not None:
 
     # --- Show summary stats ---
     col1, col2, col3 = st.columns(3)
-    col1.metric("Simultion Outcome", analysis['outcome'])
+    col1.metric("Simulation Outcome", analysis['outcome'])
     col2.metric("Final Striking Workers", analysis['final_striking_workers'])
     col3.metric("Final Working Workers", analysis['final_working_workers'])
     st.write(f"**Average morale:** {analysis['average_morale']:.3f}")
@@ -219,38 +276,47 @@ if st.session_state.simulation_results is not None:
     st.subheader("Time Series Plots")
     fig, axes = plt.subplots(2, 3, figsize=(18, 10))
     
-    # Create day numbers for x-axis
-    days = list(range(len(results['striking_workers'])))
+    # Create calendar dates for x-axis
+    calendar_dates = [start_date + timedelta(days=i) for i in range(len(results['striking_workers']))]
     
     # Calculate strike days for annotation
     strike_days = []
     if strike_pattern != 'indefinite':
         current_date = start_date
-        for i, day in enumerate(days):
+        for i, day in enumerate(range(len(results['striking_workers']))):
             if sim.is_strike_day(current_date):
                 strike_days.append(i)
             current_date += timedelta(days=1)
     
-    axes[0, 0].plot(days, results['striking_workers'], label='Striking', color='red')
-    axes[0, 0].plot(days, results['working_workers'], label='Working', color='blue')
+    axes[0, 0].plot(calendar_dates, results['striking_workers'], label='Striking', color='red')
+    axes[0, 0].plot(calendar_dates, results['working_workers'], label='Working', color='blue')
     # Add vertical lines for strike days
-    for strike_day in strike_days:
-        axes[0, 0].axvline(x=strike_day, color='orange', alpha=0.3, linestyle='--')
     axes[0, 0].set_title('Worker Participation Over Time')
-    axes[0, 0].set_xlabel('Day of Simulation')
+    axes[0, 0].set_xlabel('Date')
     axes[0, 0].legend()
-    axes[0, 1].plot(days, results['average_morale'], color='purple')
+    # Format x-axis to show dates nicely
+    axes[0, 0].tick_params(axis='x', rotation=45)
+    
+    axes[0, 1].plot(calendar_dates, results['average_morale'], color='purple')
     axes[0, 1].set_title('Average Worker Morale Over Time')
-    axes[0, 1].set_xlabel('Day of Simulation')
-    axes[0, 2].plot(days, results['average_savings'], color='brown')
+    axes[0, 1].set_xlabel('Date')
+    axes[0, 1].tick_params(axis='x', rotation=45)
+    
+    axes[0, 2].plot(calendar_dates, results['average_savings'], color='brown')
     axes[0, 2].set_title('Average Worker Savings Over Time')
-    axes[0, 2].set_xlabel('Day of Simulation')
-    axes[1, 0].plot(days, results['employer_balance'], color='green')
+    axes[0, 2].set_xlabel('Date')
+    axes[0, 2].tick_params(axis='x', rotation=45)
+    
+    axes[1, 0].plot(calendar_dates, results['employer_balance'], color='green')
     axes[1, 0].set_title('Employer Balance Over Time')
-    axes[1, 0].set_xlabel('Day of Simulation')
-    axes[1, 1].plot(days, results['union_balance'], color='orange')
+    axes[1, 0].set_xlabel('Date')
+    axes[1, 0].tick_params(axis='x', rotation=45)
+    
+    axes[1, 1].plot(calendar_dates, results['union_balance'], color='orange')
     axes[1, 1].set_title('Union Strike Fund Balance Over Time')
-    axes[1, 1].set_xlabel('Day of Simulation')
+    axes[1, 1].set_xlabel('Date')
+    axes[1, 1].tick_params(axis='x', rotation=45)
+    
     # Hide the last subplot
     axes[1, 2].set_visible(False)
     plt.tight_layout()
@@ -301,7 +367,7 @@ if st.session_state.simulation_results is not None:
 
 
     # --- Display Calendar & Strike Pattern Info ---
-    st.subheader("📅 Calendar & Strike Pattern")
+    st.subheader("📅 Strike Calendar")
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.metric("Start Date", start_date.strftime('%Y-%m-%d'))
@@ -334,39 +400,91 @@ if st.session_state.simulation_results is not None:
     # --- Network Visualizations ---
     st.subheader("🌐 Network Visualizations")
     st.markdown("""
-    Visual representation of the employer and union networks at the beginning and end of the simulation.
+    Visual representation of the employer and union networks at the first and last strike days.
     Node colors indicate worker states: 🔴 Striking, 🔵 Working, 🟠 Union Committee, 🟢 Manager
     """)
     
     # Check if we have worker states data
     if results['worker_states'] and len(results['worker_states']) > 0:
-        # Create visualizations for first and final timesteps
-        first_timestep = 0
-        final_timestep = len(results['worker_states']) - 1
+        # Find first and last strike days
+        first_strike_day = None
+        last_strike_day = None
         
-        # First timestep visualization
-        st.markdown("### 📊 First Timestep (Day 0)")
-        try:
-            fig_first = sim.visualize_networks_at_timestep(first_timestep)
-            if fig_first:
-                st.pyplot(fig_first)
-                plt.close(fig_first)
-            else:
-                st.warning("Could not generate first timestep visualization")
-        except Exception as e:
-            st.error(f"Error generating first timestep visualization: {e}")
+        # Calculate strike days and find first/last ones
+        strike_day_timesteps = []
+        if strike_pattern != 'indefinite':
+            current_date = start_date
+            for i, day in enumerate(range(len(results['worker_states']))):
+                if sim.is_strike_day(current_date):
+                    strike_day_timesteps.append(i)
+                current_date += timedelta(days=1)
+        else:
+            # For indefinite strikes, find days where there were actually striking workers
+            for i, striking_count in enumerate(results['striking_workers']):
+                if striking_count > 0:
+                    strike_day_timesteps.append(i)
         
-        # Final timestep visualization
-        st.markdown("### 📊 Final Timestep (Day {})".format(final_timestep))
-        try:
-            fig_final = sim.visualize_networks_at_timestep(final_timestep)
-            if fig_final:
-                st.pyplot(fig_final)
-                plt.close(fig_final)
+        if strike_day_timesteps:
+            first_strike_day = strike_day_timesteps[0]
+            last_strike_day = strike_day_timesteps[-1]
+            
+            # First strike day visualization
+            first_strike_date = start_date + timedelta(days=first_strike_day)
+            st.markdown(f"### 📊 First Strike Day ({first_strike_date.strftime('%Y-%m-%d')})")
+            try:
+                fig_first = sim.visualize_networks_at_timestep(first_strike_day)
+                if fig_first:
+                    st.pyplot(fig_first)
+                    plt.close(fig_first)
+                else:
+                    st.warning("Could not generate first strike day visualization")
+            except Exception as e:
+                st.error(f"Error generating first strike day visualization: {e}")
+            
+            # Last strike day visualization (only if different from first)
+            if last_strike_day != first_strike_day:
+                last_strike_date = start_date + timedelta(days=last_strike_day)
+                st.markdown(f"### 📊 Last Strike Day ({last_strike_date.strftime('%Y-%m-%d')})")
+                try:
+                    fig_last = sim.visualize_networks_at_timestep(last_strike_day)
+                    if fig_last:
+                        st.pyplot(fig_last)
+                        plt.close(fig_last)
+                    else:
+                        st.warning("Could not generate last strike day visualization")
+                except Exception as e:
+                    st.error(f"Error generating last strike day visualization: {e}")
             else:
-                st.warning("Could not generate final timestep visualization")
-        except Exception as e:
-            st.error(f"Error generating final timestep visualization: {e}")
+                st.info("Only one strike day occurred during the simulation.")
+        else:
+            # Fallback to first and last timesteps if no strike days found
+            st.warning("No strike days found. Showing first and last timesteps instead.")
+            first_timestep = 0
+            final_timestep = len(results['worker_states']) - 1
+            
+            # First timestep visualization
+            st.markdown("### 📊 First Timestep (Day 0)")
+            try:
+                fig_first = sim.visualize_networks_at_timestep(first_timestep)
+                if fig_first:
+                    st.pyplot(fig_first)
+                    plt.close(fig_first)
+                else:
+                    st.warning("Could not generate first timestep visualization")
+            except Exception as e:
+                st.error(f"Error generating first timestep visualization: {e}")
+            
+            # Final timestep visualization
+            st.markdown(f"### 📊 Final Timestep (Day {final_timestep})")
+            try:
+                fig_final = sim.visualize_networks_at_timestep(final_timestep)
+                if fig_final:
+                    st.pyplot(fig_final)
+                    plt.close(fig_final)
+                else:
+                    st.warning("Could not generate final timestep visualization")
+            except Exception as e:
+                st.error(f"Error generating final timestep visualization: {e}")
         
         # Add explanation of the visualizations
         st.markdown("""
@@ -382,18 +500,169 @@ if st.session_state.simulation_results is not None:
         st.warning("No worker state data available for network visualization")
 
     # --- Download Results ---
-    st.subheader("Download Results")
-    # Save summary CSV to temp file
-    with tempfile.NamedTemporaryFile(delete=False, suffix='.csv') as tmp_csv:
-        sim.save_summary_to_csv(tmp_csv.name)
-        st.download_button("Download Summary CSV", data=open(tmp_csv.name, 'rb').read(), file_name='strikesim_summary.csv')
-    # Save HDF5 to temp file
-    with tempfile.NamedTemporaryFile(delete=False, suffix='.h5') as tmp_h5:
-        sim.save_to_hdf5(tmp_h5.name)
-        st.download_button("Download Full HDF5 Data", data=open(tmp_h5.name, 'rb').read(), file_name='strikesim_data.h5')
+    st.subheader("📥 Download Results")
+    
+    # Employer name input
+    employer_name = st.text_input(
+        "Employer Name (for file naming)",
+        value="",
+        placeholder="e.g., University of Example, DEFRA, NHS Trust",
+        help="Enter the employer name to prefix all downloaded files"
+    )
+    
+    # Clean employer name for file naming (remove special characters, replace spaces with underscores)
+    if employer_name:
+        clean_employer_name = "".join(c for c in employer_name if c.isalnum() or c in (' ', '-', '_')).rstrip()
+        clean_employer_name = clean_employer_name.replace(' ', '_').replace('-', '_')
+        file_prefix = f"{clean_employer_name}_"
+    else:
+        file_prefix = ""
+    
+    # Use dashboard value if set, else fallback to settings.py
+    def get_val(name):
+        return locals().get(name, getattr(settings, name))
+    
+    # Compose settings content robustly
+    settings_content = f"""#settings for strikesim
+
+#calendar
+start_date = '{start_date.strftime('%Y-%m-%d')}'
+duration = {duration}
+working_days = {working_days}
+
+#strike pattern settings
+strike_pattern = '{strike_pattern}'
+weekly_escalation_start = {get_val('weekly_escalation_start')}
+
+#employer policy
+concession_policy = '{settings.concession_policy}'
+retaliation_policy = '{settings.retaliation_policy}'
+revenue_markup = {revenue_markup}
+concession_threshold = {concession_threshold}
+
+#union policy
+strike_pay_policy = '{settings.strike_pay_policy}'
+strike_pay_rate = {strike_pay_rate}
+dues_rate = {dues_rate}
+
+#worker parameters
+num_workers = {get_val('num_workers')}
+initial_wage = {initial_wage}
+target_wage = {target_wage}
+initial_savings_range = {get_val('initial_savings_range')}
+initial_morale_range = {get_val('initial_morale_range')}
+daily_expenditure_rate = {settings.daily_expenditure_rate}
+
+#financial parameters
+initial_employer_balance = {initial_employer_balance}
+initial_strike_fund = {initial_strike_fund}
+
+#network parameters
+lab_size_n = {get_val('lab_size_n')}
+lab_size_prob = {get_val('lab_size_prob')}
+total_friends_n = {get_val('total_friends_n')}
+total_friends_prob = {get_val('total_friends_prob')}
+lab_friends_prob = {get_val('lab_friends_prob')}
+department_friends_prob = {get_val('department_friends_prob')}
+university_friends_prob = {get_val('university_friends_prob')}
+num_departments = {get_val('num_departments')}
+avg_department_size = {get_val('avg_department_size')}
+
+#union network
+bargaining_committee_size = {get_val('bargaining_committee_size')}
+steward_percentage = {get_val('steward_percentage')}
+branch_connectedness = {get_val('branch_connectedness')}
+
+#network file loading
+employer_network_file = {repr(employer_network_choice if employer_network_choice != 'random' else None)}
+union_network_file = {repr(union_network_choice if union_network_choice != 'random' else None)}
+
+#morale parameters
+morale_specification = '{morale_specification}'
+private_morale_alpha = {settings.private_morale_alpha}
+social_morale_beta = {settings.social_morale_beta}
+
+#sigmoid morale parameters
+inflation = {settings.inflation}
+belt_tightening = {settings.belt_tightening}
+sigmoid_gamma = {settings.sigmoid_gamma}
+
+#linear morale parameters
+linear_alpha = {settings.linear_alpha}
+linear_beta = {settings.linear_beta}
+linear_gamma = {settings.linear_gamma}
+linear_phi = {settings.linear_phi}
+
+#no_motivation morale parameters
+no_motivation_alpha = {settings.no_motivation_alpha}
+no_motivation_beta = {settings.no_motivation_beta}
+no_motivation_gamma = {settings.no_motivation_gamma}
+
+#participation parameters
+participation_threshold = {settings.participation_threshold}
+
+#policy adjustment parameters
+low_participation_threshold = {settings.low_participation_threshold}
+high_participation_threshold = {settings.high_participation_threshold}
+strike_pay_increase = {settings.strike_pay_increase}
+strike_pay_decrease = {settings.strike_pay_decrease}
+min_strike_pay_rate = {settings.min_strike_pay_rate}
+max_strike_pay_rate = {settings.max_strike_pay_rate}
+
+#concession parameters
+concession_amount = {settings.concession_amount}
+
+#simulation parameters
+monte_carlo_simulations = {settings.monte_carlo_simulations}
+"""
+    
+    # Download buttons in columns
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.csv') as tmp_csv:
+            sim.save_summary_to_csv(tmp_csv.name)
+            st.download_button(
+                "📊 Download Summary CSV", 
+                data=open(tmp_csv.name, 'rb').read(), 
+                file_name=f'{file_prefix}strikesim_summary.csv',
+                help="Download simulation summary statistics as CSV"
+            )
+    
+    with col2:
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.h5') as tmp_h5:
+            sim.save_to_hdf5(tmp_h5.name)
+            st.download_button(
+                "💾 Download Full HDF5 Data", 
+                data=open(tmp_h5.name, 'rb').read(), 
+                file_name=f'{file_prefix}strikesim_data.h5',
+                help="Download complete simulation data in HDF5 format"
+            )
+    
+    with col3:
+        st.download_button(
+            "⚙️ Download Settings File", 
+            data=settings_content, 
+            file_name=f'{file_prefix}strikesim_settings.py',
+            help="Download the complete settings file used for this simulation"
+        )
+    
+    if employer_name:
+        st.info(f"📝 Files will be prefixed with: **{clean_employer_name}_**")
+    else:
+        st.info("📝 Enter an employer name above to prefix your downloaded files")
 
     # --- Show outcome text ---
     st.success(f"Simulation complete! Outcome: {analysis['outcome']}")
 
 else:
     st.info("Adjust parameters in the sidebar and click 'Run Simulation' to begin.") 
+
+# --- Settings File Upload ---
+st.markdown('---')
+st.subheader('⚙️ Upload Settings File')
+settings_file = st.file_uploader('Upload a settings.py file to view or use its parameters:', type=['py'])
+if settings_file is not None:
+    uploaded_settings = settings_file.read().decode('utf-8')
+    st.code(uploaded_settings, language='python')
+    st.info('Settings file uploaded. To use these settings, copy and paste them into your settings.py or manually update the dashboard parameters above.') 

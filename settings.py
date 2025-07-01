@@ -33,15 +33,21 @@ initial_employer_balance = 50000.0  # Lower employer balance
 initial_strike_fund = 100000.0  # Higher strike fund
 
 #network parameters
-#employer network
-executive_size = 3
-department_size = 5
-team_size = 8
+#employer network (university-style)
+lab_size_n = 3  # Negative binomial parameter n for lab sizes
+lab_size_prob = 0.50  # Negative binomial parameter p for lab sizes
+total_friends_n = 3  # Negative binomial parameter n for total friends
+total_friends_prob = 0.4  # Negative binomial parameter p for total friends
+lab_friends_prob = 0.6  # Probability of connections to lab mates
+department_friends_prob = 0.3  # Probability of connections to department mates
+university_friends_prob = 0.1  # Probability of connections to university mates
+num_departments = 5  # Number of departments to generate (if synthetic data needed)
+avg_department_size = 20  # Average department size (if synthetic data needed)
 
 #union network
 bargaining_committee_size = 3
 steward_percentage = 0.1  # 10% of workers are union stewards
-team_density = 0.7  # Higher density
+branch_connectedness = 0.7  # Higher density
 
 #network file loading (set to None to use generated networks, or specify filename without .gexf extension)
 employer_network_file = None  # e.g., 'defra' to load networks/employers/defra.gexf
@@ -84,4 +90,3 @@ concession_amount = 5.0
 
 #simulation parameters
 monte_carlo_simulations = 100
-

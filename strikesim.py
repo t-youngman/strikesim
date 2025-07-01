@@ -221,78 +221,72 @@ class StrikeSimulation:
         }
         
     def generate_employer_network(self, num_workers: int = None, 
-                                 executive_size: int = None, 
-                                 department_size: int = None, 
-                                 team_size: int = None) -> nx.Graph:
-        """Generate hierarchical employer network where managers are also workers"""
-        G = nx.Graph()
+                                 lab_size_n: int = 3, 
+                                 lab_size_prob: float = 0.50,
+                                 total_friends_n: int = 3,
+                                 total_friends_prob: float = 0.4,
+                                 lab_friends_prob: float = 0.6,
+                                 department_friends_prob: float = 0.3,
+                                 university_friends_prob: float = 0.1,
+                                 num_departments: int = None,
+                                 avg_department_size: int = None) -> nx.Graph:
+        """Generate university-style employer network using UniversityNetwork.py approach
         
-        # If num_workers is specified, calculate appropriate sizes
-        if num_workers is not None:
-            if num_workers < 3:
-                # Very small organization: all workers are executives
-                executive_size = num_workers
-                department_size = 0
-                team_size = 0
-            elif num_workers < 8:
-                # Small organization: executives + some departments
-                executive_size = max(1, num_workers // 3)
-                department_size = num_workers - executive_size
-                team_size = 0
-            else:
-                # Larger organization: executives + departments + teams
-                executive_size = max(1, num_workers // 8)  # ~12.5% executives
-                department_size = max(1, num_workers // 4)  # ~25% departments
-                team_size = num_workers - executive_size - department_size
-        else:
-            # Use default values if not specified
-            executive_size = executive_size or 3
-            department_size = department_size or 5
-            team_size = team_size or 8
-        
-        # Ensure we don't exceed the specified number of workers
-        total_workers = executive_size + department_size + team_size
-        if num_workers is not None and total_workers > num_workers:
-            # Adjust team size to fit
-            team_size = max(0, num_workers - executive_size - department_size)
-            total_workers = executive_size + department_size + team_size
-        
-        # Create executive level (managers who are also workers)
-        executives = list(range(executive_size))
-        for i in executives:
-            G.add_node(i, level='executive', type='worker', is_manager=True)
-        
-        # Create department level (managers who are also workers)
-        departments = list(range(executive_size, executive_size + department_size))
-        for i in departments:
-            G.add_node(i, level='department', type='worker', is_manager=True)
-            # Connect to executives
-            for j in executives:
-                G.add_edge(i, j)
-        
-        # Create team level (regular workers)
-        teams = list(range(executive_size + department_size, 
-                          executive_size + department_size + team_size))
-        for i in teams:
-            G.add_node(i, level='team', type='worker', is_manager=False)
-            # Connect to departments
-            for j in departments:
-                G.add_edge(i, j)
-        
-        return G
-    
+        Args:
+            num_workers: Total number of workers (if None, will be determined by department data)
+            lab_size_n: Negative binomial parameter n for lab sizes
+            lab_size_prob: Negative binomial parameter p for lab sizes
+            total_friends_n: Negative binomial parameter n for total friends
+            total_friends_prob: Negative binomial parameter p for total friends
+            lab_friends_prob: Probability of connections to lab mates
+            department_friends_prob: Probability of connections to department mates
+            university_friends_prob: Probability of connections to university mates
+            num_departments: Number of departments to generate (if synthetic data needed)
+            avg_department_size: Average department size (if synthetic data needed)
+        """
+        try:
+            # Import the UniversityNetwork module
+            import sys
+            import os
+            sys.path.append(os.path.join(os.path.dirname(__file__), 'networks'))
+            from UniversityNetwork import generate_university_network
+            
+            # Generate the network using UniversityNetwork.py
+            G, edges = generate_university_network(
+                num_workers=num_workers,
+                lab_size_n=lab_size_n,
+                lab_size_prob=lab_size_prob,
+                total_friends_n=total_friends_n,
+                total_friends_prob=total_friends_prob,
+                lab_friends_prob=lab_friends_prob,
+                department_friends_prob=department_friends_prob,
+                university_friends_prob=university_friends_prob,
+                num_departments=num_departments,
+                avg_department_size=avg_department_size,
+            )
+            
+            print(f"Generated university-style employer network with {G.number_of_nodes()} nodes and {G.number_of_edges()} edges")
+            return G
+            
+        except ImportError as e:
+            print(f"Warning: Could not import UniversityNetwork module: {e}")
+            print("Falling back to original hierarchical network generation")
+            return self._generate_hierarchical_employer_network(num_workers)
+        except Exception as e:
+            print(f"Error generating university network: {e}")
+            print("Falling back to original hierarchical network generation")
+            return self._generate_hierarchical_employer_network(num_workers)
+  
     def generate_union_network(self, num_workers: int, steward_percentage: float = 0.1,
                               bargaining_committee_size: int = 3,
-                              team_density: float = 0.5,
-                              manager_union_probability: float = 0.4) -> nx.Graph:
-        """Generate union network with workers and managers as potential union members.
+                              branch_connectedness: float = 0.5) -> nx.Graph:
+        """Generate union network based on employer network.
         
         Args:
             num_workers: Total number of workers
             steward_percentage: Fraction of workers who are union stewards (well-connected)
             bargaining_committee_size: Number of bargaining committee members
-            team_density: Probability of connections between regular union members
-            manager_union_probability: Probability that managers join the union
+            branch_connectedness: Probability of connections between regular union members
         """
         G = nx.Graph()
         
@@ -343,10 +337,10 @@ class StrikeSimulation:
                         if random.random() < 0.3:  # 30% chance to connect to each steward
                             G.add_edge(i, steward_id)
                     
-                    # Connect regular members to each other based on team_density
+                    # Connect regular members to each other based on branch_connectedness
                     for j in range(i + 1, num_workers):
                         if j not in steward_ids and G.has_node(j):  # Only connect to other regular members
-                            if random.random() < team_density:
+                            if random.random() < branch_connectedness:
                                 G.add_edge(i, j)
         
         return G
@@ -511,8 +505,19 @@ class StrikeSimulation:
         initial_morale_range = self.settings.get('initial_morale_range', (0.5, 0.8))
         initial_savings_range = self.settings.get('initial_savings_range', (0.0, 1000.0))
         steward_percentage = self.settings.get('steward_percentage', 0.1)
-        team_density = self.settings.get('team_density', 0.5)
+        branch_connectedness = self.settings.get('branch_connectedness', 0.5)
         bargaining_committee_size = self.settings.get('bargaining_committee_size', 3)
+        
+        # University network parameters
+        lab_size_n = self.settings.get('lab_size_n', 3)
+        lab_size_prob = self.settings.get('lab_size_prob', 0.50)
+        total_friends_n = self.settings.get('total_friends_n', 3)
+        total_friends_prob = self.settings.get('total_friends_prob', 0.4)
+        lab_friends_prob = self.settings.get('lab_friends_prob', 0.6)
+        department_friends_prob = self.settings.get('department_friends_prob', 0.3)
+        university_friends_prob = self.settings.get('university_friends_prob', 0.1)
+        num_departments = self.settings.get('num_departments', None)
+        avg_department_size = self.settings.get('avg_department_size', None)
         
         # Initialize networks first to determine number of workers
         employer_network_file = self.settings.get('employer_network_file', None)
@@ -542,13 +547,24 @@ class StrikeSimulation:
         
         # If random networks are needed, generate them now with correct num_workers
         if self.employer_network is None:
-            self.employer_network = self.generate_employer_network(num_workers=num_workers)
+            self.employer_network = self.generate_employer_network(
+                num_workers=num_workers,
+                lab_size_n=lab_size_n,
+                lab_size_prob=lab_size_prob,
+                total_friends_n=total_friends_n,
+                total_friends_prob=total_friends_prob,
+                lab_friends_prob=lab_friends_prob,
+                department_friends_prob=department_friends_prob,
+                university_friends_prob=university_friends_prob,
+                num_departments=num_departments,
+                avg_department_size=avg_department_size,
+            )
         if self.union_network is None:
             self.union_network = self.generate_union_network(
                 num_workers=num_workers,
                 steward_percentage=steward_percentage,
                 bargaining_committee_size=bargaining_committee_size,
-                team_density=team_density
+                branch_connectedness=branch_connectedness
             )
         
         # Create workers based on determined number
@@ -651,14 +667,12 @@ class StrikeSimulation:
             employer_morales = []
             
             for neighbor_id in employer_neighbors:
-                if neighbor_id < len(self.workers):  # Worker node (including managers)
+                if neighbor_id < len(self.workers):  # Worker node
                     neighbor_worker = self.workers[neighbor_id]
                     # On strike days, exclude striking workers from employer network influence
                     if is_strike_day and neighbor_worker.state == 'striking':
                         continue
-                    employer_morales.append(neighbor_worker.morale)
-                # Note: No more separate management nodes - managers are now workers
-            
+                    employer_morales.append(neighbor_worker.morale)            
             if employer_morales:
                 employer_influence = np.mean(employer_morales)
         
@@ -1048,12 +1062,13 @@ class StrikeSimulation:
         # Union network
         pos_union = nx.spring_layout(self.union_network, k=1, iterations=50)
         
-        # Color nodes based on worker states
+        # Color nodes based on worker states - ensure proper ordering
+        nodes_union = list(self.union_network.nodes())
         node_colors_union = []
         node_sizes_union = []
         node_labels_union = {}
         
-        for node in self.union_network.nodes():
+        for node in nodes_union:
             if node < len(worker_states):  # Worker node
                 # Check if this is a steward
                 is_steward = self.union_network.nodes[node].get('is_steward', False)
@@ -1085,6 +1100,13 @@ class StrikeSimulation:
                 node_sizes_union.append(600)
                 node_labels_union[node] = f'C{abs(node)}'
         
+        # Ensure arrays have the same length as the number of nodes
+        if len(node_colors_union) != len(nodes_union) or len(node_sizes_union) != len(nodes_union):
+            # Fallback: use default values for all nodes
+            node_colors_union = ['#888888'] * len(nodes_union)
+            node_sizes_union = [400] * len(nodes_union)
+            node_labels_union = {node: f'N{node}' for node in nodes_union}
+        
         nx.draw(self.union_network, pos_union, ax=ax1,
                 node_color=node_colors_union, node_size=node_sizes_union,
                 labels=node_labels_union, font_size=10, font_weight='bold',
@@ -1109,28 +1131,34 @@ class StrikeSimulation:
         # Employer network
         pos_employer = nx.spring_layout(self.employer_network, k=1, iterations=50)
         
-        # Color nodes based on worker states
+        # Color nodes based on worker states - ensure proper ordering
+        nodes_employer = list(self.employer_network.nodes())
         node_colors_employer = []
         node_sizes_employer = []
         node_labels_employer = {}
         
-        for node in self.employer_network.nodes():
-            if node < len(worker_states):  # Worker node (including managers)
+        for node in nodes_employer:
+            if node < len(worker_states):  # Worker node 
                 if worker_states[node] == 'striking':
                     node_colors_employer.append('#ff4444')  # Bright red
                 elif worker_states[node] == 'not_striking':
                     node_colors_employer.append('#4444ff')  # Bright blue
                 else:
                     node_colors_employer.append('#888888')  # Gray
-                
-                # Check if this is a manager (first 8 workers are managers)
-                is_manager = node < 8
-                if is_manager:
-                    node_sizes_employer.append(500)  # Slightly larger for managers
-                    node_labels_employer[node] = f'M{node}'
-                else:
-                    node_sizes_employer.append(400)
-                    node_labels_employer[node] = f'W{node}'
+                node_sizes_employer.append(400)
+                node_labels_employer[node] = f'W{node}'
+            else:
+                # Handle any non-worker nodes (managers, etc.)
+                node_colors_employer.append('#00ff00')  # Green for managers
+                node_sizes_employer.append(600)
+                node_labels_employer[node] = f'M{node}'
+        
+        # Ensure arrays have the same length as the number of nodes
+        if len(node_colors_employer) != len(nodes_employer) or len(node_sizes_employer) != len(nodes_employer):
+            # Fallback: use default values for all nodes
+            node_colors_employer = ['#888888'] * len(nodes_employer)
+            node_sizes_employer = [400] * len(nodes_employer)
+            node_labels_employer = {node: f'N{node}' for node in nodes_employer}
         
         nx.draw(self.employer_network, pos_employer, ax=ax2,
                 node_color=node_colors_employer, node_size=node_sizes_employer,
@@ -1143,11 +1171,7 @@ class StrikeSimulation:
             plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='#ff4444', 
                       markersize=15, label='Striking Worker'),
             plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='#4444ff', 
-                      markersize=15, label='Working Worker'),
-            plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='#4444ff', 
-                      markersize=18, label='Manager (Working)'),
-            plt.Line2D([0], [0], marker='o', color='w', markerfacecolor='#ff4444', 
-                      markersize=18, label='Manager (Striking)')
+                      markersize=15, label='Working Worker')
         ]
         ax2.legend(handles=legend_elements, loc='upper right', fontsize=10)
         
