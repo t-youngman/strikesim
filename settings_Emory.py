@@ -10,10 +10,10 @@ strike_pattern = 'indefinite'
 weekly_escalation_start = 1
 
 #employer policy
-concession_policy = 'none'
-retaliation_policy = 'none'
-revenue_markup = 1.5
-concession_threshold = -10000.0
+#concession_policy = 'none'
+#retaliation_policy = 'none'
+#revenue_markup = 1.5
+#concession_threshold = -10000.0
 
 #union policy
 strike_pay_policy = 'fixed'
@@ -79,7 +79,7 @@ min_strike_pay_rate = 0.3
 max_strike_pay_rate = 0.8
 
 #concession parameters
-concession_amount = 5.0
+#concession_amount = 5.0
 
 #simulation parameters
 monte_carlo_simulations = 100

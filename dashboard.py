@@ -207,7 +207,7 @@ settings_dict = dict(
     duration=duration,
     start_date=start_date.strftime('%Y-%m-%d'),
     working_days=working_days,
-    concession_policy=settings.concession_policy,
+    #concession_policy=settings.concession_policy,
     strike_pay_policy=settings.strike_pay_policy,
     # Strike pattern settings
     strike_pattern=strike_pattern,
@@ -618,9 +618,8 @@ strike_pattern = '{strike_pattern}'
 weekly_escalation_start = {get_val('weekly_escalation_start')}
 
 #employer policy
-concession_policy = '{settings.concession_policy}'
-retaliation_policy = '{settings.retaliation_policy}'
-concession_threshold = {concession_threshold}
+#concession_policy = '{settings.concession_policy}'
+#retaliation_policy = '{settings.retaliation_policy}'
 
 #union policy
 strike_pay_policy = '{settings.strike_pay_policy}'
@@ -661,7 +660,6 @@ employer_network_file = {repr(employer_network_choice if employer_network_choice
 #morale parameters
 morale_specification = '{morale_specification}'
 private_morale_alpha = {settings.private_morale_alpha}
-social_morale_beta = {settings.social_morale_beta}
 
 #sigmoid morale parameters
 inflation = {settings.inflation}
@@ -686,7 +684,7 @@ min_strike_pay_rate = {settings.min_strike_pay_rate}
 max_strike_pay_rate = {settings.max_strike_pay_rate}
 
 #concession parameters
-concession_amount = {settings.concession_amount}
+#concession_amount = {settings.concession_amount}
 
 #simulation parameters
 monte_carlo_simulations = {settings.monte_carlo_simulations}

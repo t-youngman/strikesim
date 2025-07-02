@@ -98,14 +98,14 @@ class Employer:
         self.total_balance = self.balance
         self.balance_history.append(self.balance)
         
-    def should_grant_concession(self) -> bool:
-        """Check if employer should grant concession based on threshold"""
-        return self.balance < self.concession_threshold
+    #def should_grant_concession(self) -> bool:
+    #    """Check if employer should grant concession based on threshold"""
+    #    return self.balance < self.concession_threshold
         
-    def grant_concession(self, amount: float):
-        """Grant wage concession to workers"""
-        self.concessions_granted += amount #is this a one-off or permanent?
-        self.balance -= amount
+    #def grant_concession(self, amount: float):
+    #    """Grant wage concession to workers"""
+    #    self.concessions_granted += amount #is this a one-off or permanent?
+    #    self.balance -= amount
 
 class Union:
     def __init__(self, initial_strike_fund: float, strike_pay_rate: float = 0.5,
