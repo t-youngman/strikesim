@@ -620,7 +620,7 @@ class StrikeSimulation:
         elif morale_spec == 'linear':
             # Linear specification
             alpha, beta, gamma, phi = self.settings.get('linear_alpha', 0.3), self.settings.get('linear_beta', 0.3), self.settings.get('linear_gamma', 0.4), self.settings.get('linear_phi', 0.3)
-            linear_morale = alpha * wage_gap + beta * daily_depletion + gamma * worker.morale
+            linear_morale = alpha * wage_gap + beta * daily_depletion
             # For linear specification, use the components as factors
             wage_factor = alpha * wage_gap
             savings_factor = beta * daily_depletion

@@ -617,10 +617,6 @@ working_days = {working_days}
 strike_pattern = '{strike_pattern}'
 weekly_escalation_start = {get_val('weekly_escalation_start')}
 
-#employer policy
-#concession_policy = '{settings.concession_policy}'
-#retaliation_policy = '{settings.retaliation_policy}'
-
 #union policy
 strike_pay_policy = '{settings.strike_pay_policy}'
 strike_pay_rate = {strike_pay_rate}
@@ -682,9 +678,6 @@ strike_pay_increase = {settings.strike_pay_increase}
 strike_pay_decrease = {settings.strike_pay_decrease}
 min_strike_pay_rate = {settings.min_strike_pay_rate}
 max_strike_pay_rate = {settings.max_strike_pay_rate}
-
-#concession parameters
-#concession_amount = {settings.concession_amount}
 
 #simulation parameters
 monte_carlo_simulations = {settings.monte_carlo_simulations}
