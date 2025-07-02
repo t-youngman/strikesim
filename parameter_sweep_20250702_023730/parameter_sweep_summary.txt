@@ -1,0 +1,49 @@
+Parameter Sweep Summary
+==================================================
+
+Generated on: 2025-07-02 05:00:13
+Total combinations: 1,980
+Successful runs: 1980
+Failed runs: 0
+
+Results Statistics (excluding errors):
+----------------------------------------
+Final striking workers:
+  Mean: 1494.16
+  Std: 499.05
+  Min: 0
+  Max: 1729
+
+Final average morale:
+  Mean: 0.6622
+  Std: 0.1627
+  Min: 0.4362
+  Max: 0.9500
+
+Parameter combinations with maximum striking workers:
+  Inflation: 0.01
+  Belt tightening: -0.7
+  Sigmoid gamma: 0.0
+  Private morale alpha: 0.5
+  Final striking workers: 1729.0
+  Final average morale: 0.8157
+
+Parameter combinations with minimum striking workers:
+  Inflation: 0.01
+  Belt tightening: -0.7
+  Sigmoid gamma: 1.0
+  Private morale alpha: 0.5
+  Final striking workers: 0.0
+  Final average morale: 0.4413
+
+Parameter Correlations:
+-------------------------
+inflation vs final_striking_workers: -0.0093
+inflation vs final_average_morale: -0.0028
+belt_tightening vs final_striking_workers: -0.0767
+belt_tightening vs final_average_morale: -0.5827
+sigmoid_gamma vs final_striking_workers: -0.4687
+sigmoid_gamma vs final_average_morale: -0.4189
+private_morale_alpha vs final_striking_workers: 0.0577
+private_morale_alpha vs final_average_morale: 0.0603
+

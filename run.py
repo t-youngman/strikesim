@@ -3,7 +3,7 @@
 Example script to run the strike simulation with different network configurations.
 """
 
-import settings
+import settings.settings as settings
 from strikesim import StrikeSimulation
 import os
 import shutil

@@ -607,7 +607,7 @@ class StrikeSimulation:
             # Sigmoid specification 
             def calibrate_sigmoid(reference, target):
                 return -(1/reference)*np.log((1-target)/target)
-            alpha = calibrate_sigmoid(self.settings.get('inflation', 0.05), 0.8)
+            alpha = calibrate_sigmoid(self.settings.get('inflation', 0.05), 0.55)
             beta = calibrate_sigmoid(self.settings.get('belt_tightening', -0.2),0.2)
             gamma = self.settings.get('sigmoid_gamma', 1)
             # Factors

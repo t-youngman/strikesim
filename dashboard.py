@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import tempfile
 import os
 from strikesim import StrikeSimulation
-import Emory_settings as settings
+import settings_Emory as settings
 import networkx as nx
 from datetime import datetime, timedelta
 

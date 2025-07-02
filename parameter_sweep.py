@@ -14,15 +14,313 @@ from tqdm import tqdm
 import warnings
 warnings.filterwarnings('ignore')
 
+# Visualization imports
+import matplotlib.pyplot as plt
+import seaborn as sns
+from matplotlib.colors import LinearSegmentedColormap
+
 def load_emory_settings():
     """Load Emory settings and convert to dictionary"""
-    import Emory_settings
+    import settings_Emory as settings_Emory
     
     # Convert settings to dictionary
-    settings_dict = {key: value for key, value in vars(Emory_settings).items() 
+    settings_dict = {key: value for key, value in vars(settings_Emory).items() 
                     if not key.startswith('_')}
     
     return settings_dict
+
+def create_heatmap_visualizations(results_df, output_dir):
+    """Create heatmap visualizations for parameter interactions"""
+    
+    # Filter out error runs
+    valid_results = results_df[results_df['final_striking_workers'] >= 0].copy()
+    
+    if len(valid_results) == 0:
+        print("No valid results to visualize")
+        return
+    
+    # Set up the plotting style
+    plt.style.use('default')
+    sns.set_palette("husl")
+    
+    # Create figure with subplots
+    fig, axes = plt.subplots(2, 3, figsize=(18, 12))
+    fig.suptitle('Parameter Interaction Heatmaps', fontsize=16, fontweight='bold')
+    
+    # Define parameter pairs for heatmaps
+    param_pairs = [
+        ('inflation', 'belt_tightening'),
+        ('inflation', 'sigmoid_gamma'),
+        ('inflation', 'private_morale_alpha'),
+        ('belt_tightening', 'sigmoid_gamma'),
+        ('belt_tightening', 'private_morale_alpha'),
+        ('sigmoid_gamma', 'private_morale_alpha')
+    ]
+    
+    # Create heatmaps for each parameter pair
+    for idx, (param1, param2) in enumerate(param_pairs):
+        ax = axes[idx // 3, idx % 3]
+        
+        # Create pivot table for heatmap
+        pivot_data = valid_results.pivot_table(
+            values='final_striking_workers',
+            index=param1,
+            columns=param2,
+            aggfunc='mean'
+        )
+        
+        # Create heatmap
+        sns.heatmap(pivot_data, annot=False, cmap='RdYlBu_r', 
+                   cbar_kws={'label': 'Final Striking Workers'}, ax=ax)
+        ax.set_title(f'{param1.replace("_", " ").title()} vs {param2.replace("_", " ").title()}')
+        ax.set_xlabel(param2.replace('_', ' ').title())
+        ax.set_ylabel(param1.replace('_', ' ').title())
+    
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_dir, 'parameter_interaction_heatmaps.png'), 
+                dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    # Create morale heatmaps
+    fig, axes = plt.subplots(2, 3, figsize=(18, 12))
+    fig.suptitle('Parameter Interaction Heatmaps - Average Morale', fontsize=16, fontweight='bold')
+    
+    for idx, (param1, param2) in enumerate(param_pairs):
+        ax = axes[idx // 3, idx % 3]
+        
+        # Create pivot table for heatmap
+        pivot_data = valid_results.pivot_table(
+            values='final_average_morale',
+            index=param1,
+            columns=param2,
+            aggfunc='mean'
+        )
+        
+        # Create heatmap
+        sns.heatmap(pivot_data, annot=False, cmap='RdYlGn', 
+                   cbar_kws={'label': 'Final Average Morale'}, ax=ax)
+        ax.set_title(f'{param1.replace("_", " ").title()} vs {param2.replace("_", " ").title()}')
+        ax.set_xlabel(param2.replace('_', ' ').title())
+        ax.set_ylabel(param1.replace('_', ' ').title())
+    
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_dir, 'parameter_interaction_heatmaps_morale.png'), 
+                dpi=300, bbox_inches='tight')
+    plt.close()
+
+def create_parameter_effect_plots(results_df, output_dir):
+    """Create plots showing the effect of individual parameters"""
+    
+    # Filter out error runs
+    valid_results = results_df[results_df['final_striking_workers'] >= 0].copy()
+    
+    if len(valid_results) == 0:
+        print("No valid results to visualize")
+        return
+    
+    # Set up the plotting style
+    plt.style.use('default')
+    sns.set_palette("husl")
+    
+    # Create figure with subplots
+    fig, axes = plt.subplots(2, 2, figsize=(15, 12))
+    fig.suptitle('Individual Parameter Effects', fontsize=16, fontweight='bold')
+    
+    parameters = ['inflation', 'belt_tightening', 'sigmoid_gamma', 'private_morale_alpha']
+    titles = ['Inflation', 'Belt Tightening', 'Sigmoid Gamma', 'Private Morale Alpha']
+    
+    for idx, (param, title) in enumerate(zip(parameters, titles)):
+        ax = axes[idx // 2, idx % 2]
+        
+        # Create box plot
+        sns.boxplot(data=valid_results, x=param, y='final_striking_workers', ax=ax)
+        ax.set_title(f'{title} vs Final Striking Workers')
+        ax.set_xlabel(title)
+        ax.set_ylabel('Final Striking Workers')
+        
+        # Rotate x-axis labels if needed
+        if len(valid_results[param].unique()) > 10:
+            ax.tick_params(axis='x', rotation=45)
+    
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_dir, 'parameter_effects_boxplots.png'), 
+                dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    # Create scatter plots with regression lines
+    fig, axes = plt.subplots(2, 2, figsize=(15, 12))
+    fig.suptitle('Parameter Effects with Regression Lines', fontsize=16, fontweight='bold')
+    
+    for idx, (param, title) in enumerate(zip(parameters, titles)):
+        ax = axes[idx // 2, idx % 2]
+        
+        # Create scatter plot with regression line
+        sns.regplot(data=valid_results, x=param, y='final_striking_workers', 
+                   scatter_kws={'alpha': 0.5}, line_kws={'color': 'red'}, ax=ax)
+        ax.set_title(f'{title} vs Final Striking Workers')
+        ax.set_xlabel(title)
+        ax.set_ylabel('Final Striking Workers')
+    
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_dir, 'parameter_effects_regression.png'), 
+                dpi=300, bbox_inches='tight')
+    plt.close()
+
+def create_3d_visualizations(results_df, output_dir):
+    """Create 3D scatter plots for parameter interactions"""
+    
+    # Filter out error runs
+    valid_results = results_df[results_df['final_striking_workers'] >= 0].copy()
+    
+    if len(valid_results) == 0:
+        print("No valid results to visualize")
+        return
+    
+    # Set up the plotting style
+    plt.style.use('default')
+    
+    # Create 3D scatter plots
+    fig = plt.figure(figsize=(20, 15))
+    
+    # Plot 1: Inflation vs Belt Tightening vs Striking Workers
+    ax1 = fig.add_subplot(2, 3, 1, projection='3d')
+    scatter1 = ax1.scatter(valid_results['inflation'], 
+                          valid_results['belt_tightening'], 
+                          valid_results['final_striking_workers'],
+                          c=valid_results['final_striking_workers'], 
+                          cmap='viridis', alpha=0.6)
+    ax1.set_xlabel('Inflation')
+    ax1.set_ylabel('Belt Tightening')
+    ax1.set_zlabel('Final Striking Workers')
+    ax1.set_title('Inflation vs Belt Tightening vs Striking Workers')
+    plt.colorbar(scatter1, ax=ax1, shrink=0.5)
+    
+    # Plot 2: Inflation vs Sigmoid Gamma vs Striking Workers
+    ax2 = fig.add_subplot(2, 3, 2, projection='3d')
+    scatter2 = ax2.scatter(valid_results['inflation'], 
+                          valid_results['sigmoid_gamma'], 
+                          valid_results['final_striking_workers'],
+                          c=valid_results['final_striking_workers'], 
+                          cmap='plasma', alpha=0.6)
+    ax2.set_xlabel('Inflation')
+    ax2.set_ylabel('Sigmoid Gamma')
+    ax2.set_zlabel('Final Striking Workers')
+    ax2.set_title('Inflation vs Sigmoid Gamma vs Striking Workers')
+    plt.colorbar(scatter2, ax=ax2, shrink=0.5)
+    
+    # Plot 3: Belt Tightening vs Sigmoid Gamma vs Striking Workers
+    ax3 = fig.add_subplot(2, 3, 3, projection='3d')
+    scatter3 = ax3.scatter(valid_results['belt_tightening'], 
+                          valid_results['sigmoid_gamma'], 
+                          valid_results['final_striking_workers'],
+                          c=valid_results['final_striking_workers'], 
+                          cmap='inferno', alpha=0.6)
+    ax3.set_xlabel('Belt Tightening')
+    ax3.set_ylabel('Sigmoid Gamma')
+    ax3.set_zlabel('Final Striking Workers')
+    ax3.set_title('Belt Tightening vs Sigmoid Gamma vs Striking Workers')
+    plt.colorbar(scatter3, ax=ax3, shrink=0.5)
+    
+    # Plot 4: Inflation vs Belt Tightening vs Morale
+    ax4 = fig.add_subplot(2, 3, 4, projection='3d')
+    scatter4 = ax4.scatter(valid_results['inflation'], 
+                          valid_results['belt_tightening'], 
+                          valid_results['final_average_morale'],
+                          c=valid_results['final_average_morale'], 
+                          cmap='RdYlGn', alpha=0.6)
+    ax4.set_xlabel('Inflation')
+    ax4.set_ylabel('Belt Tightening')
+    ax4.set_zlabel('Final Average Morale')
+    ax4.set_title('Inflation vs Belt Tightening vs Morale')
+    plt.colorbar(scatter4, ax=ax4, shrink=0.5)
+    
+    # Plot 5: Private Morale Alpha vs Sigmoid Gamma vs Striking Workers
+    ax5 = fig.add_subplot(2, 3, 5, projection='3d')
+    scatter5 = ax5.scatter(valid_results['private_morale_alpha'], 
+                          valid_results['sigmoid_gamma'], 
+                          valid_results['final_striking_workers'],
+                          c=valid_results['final_striking_workers'], 
+                          cmap='coolwarm', alpha=0.6)
+    ax5.set_xlabel('Private Morale Alpha')
+    ax5.set_ylabel('Sigmoid Gamma')
+    ax5.set_zlabel('Final Striking Workers')
+    ax5.set_title('Private Morale Alpha vs Sigmoid Gamma vs Striking Workers')
+    plt.colorbar(scatter5, ax=ax5, shrink=0.5)
+    
+    # Plot 6: All parameters vs Striking Workers (using color for 4th parameter)
+    ax6 = fig.add_subplot(2, 3, 6, projection='3d')
+    scatter6 = ax6.scatter(valid_results['inflation'], 
+                          valid_results['belt_tightening'], 
+                          valid_results['final_striking_workers'],
+                          c=valid_results['sigmoid_gamma'], 
+                          cmap='viridis', alpha=0.6)
+    ax6.set_xlabel('Inflation')
+    ax6.set_ylabel('Belt Tightening')
+    ax6.set_zlabel('Final Striking Workers')
+    ax6.set_title('Inflation vs Belt Tightening vs Striking Workers\n(Color: Sigmoid Gamma)')
+    plt.colorbar(scatter6, ax=ax6, shrink=0.5, label='Sigmoid Gamma')
+    
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_dir, '3d_parameter_visualizations.png'), 
+                dpi=300, bbox_inches='tight')
+    plt.close()
+
+def create_summary_visualizations(results_df, output_dir):
+    """Create summary visualizations of the parameter sweep results"""
+    
+    # Filter out error runs
+    valid_results = results_df[results_df['final_striking_workers'] >= 0].copy()
+    
+    if len(valid_results) == 0:
+        print("No valid results to visualize")
+        return
+    
+    # Set up the plotting style
+    plt.style.use('default')
+    sns.set_palette("husl")
+    
+    # Create summary figure
+    fig, axes = plt.subplots(2, 2, figsize=(15, 12))
+    fig.suptitle('Parameter Sweep Summary', fontsize=16, fontweight='bold')
+    
+    # Plot 1: Distribution of final striking workers
+    ax1 = axes[0, 0]
+    sns.histplot(valid_results['final_striking_workers'], bins=30, ax=ax1)
+    ax1.set_title('Distribution of Final Striking Workers')
+    ax1.set_xlabel('Final Striking Workers')
+    ax1.set_ylabel('Frequency')
+    
+    # Plot 2: Distribution of final average morale
+    ax2 = axes[0, 1]
+    sns.histplot(valid_results['final_average_morale'], bins=30, ax=ax2)
+    ax2.set_title('Distribution of Final Average Morale')
+    ax2.set_xlabel('Final Average Morale')
+    ax2.set_ylabel('Frequency')
+    
+    # Plot 3: Scatter plot of striking workers vs morale
+    ax3 = axes[1, 0]
+    scatter = ax3.scatter(valid_results['final_striking_workers'], 
+                         valid_results['final_average_morale'],
+                         c=valid_results['inflation'], cmap='viridis', alpha=0.6)
+    ax3.set_title('Striking Workers vs Average Morale\n(Color: Inflation)')
+    ax3.set_xlabel('Final Striking Workers')
+    ax3.set_ylabel('Final Average Morale')
+    plt.colorbar(scatter, ax=ax3, label='Inflation')
+    
+    # Plot 4: Correlation heatmap of all parameters
+    ax4 = axes[1, 1]
+    param_cols = ['inflation', 'belt_tightening', 'sigmoid_gamma', 'private_morale_alpha']
+    metric_cols = ['final_striking_workers', 'final_average_morale']
+    correlation_data = valid_results[param_cols + metric_cols].corr()
+    
+    sns.heatmap(correlation_data, annot=True, cmap='RdBu_r', center=0, 
+                square=True, ax=ax4, fmt='.3f')
+    ax4.set_title('Parameter Correlations')
+    
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_dir, 'parameter_sweep_summary.png'), 
+                dpi=300, bbox_inches='tight')
+    plt.close()
 
 def run_parameter_sweep():
     """Run parameter sweep with specified ranges"""
@@ -31,10 +329,10 @@ def run_parameter_sweep():
     base_settings = load_emory_settings()
     
     # Define parameter ranges
-    inflation_range = np.arange(0.0, 0.21, 0.01)  # 0 to 0.2 in 0.01 steps
-    belt_tightening_range = np.arange(-1.0, 1.01, 0.01)  # -1 to 1 in 0.01 steps
-    sigmoid_gamma_range = np.arange(0.0, 1.01, 0.01)  # 0 to 1 in 0.01 steps
-    private_morale_alpha_range = np.arange(0.0, 1.01, 0.01)  # 0 to 1 in 0.01 steps
+    inflation_range = np.arange(0.01, 0.21, 0.1)  # 0 to 0.2 in 0.1 steps
+    belt_tightening_range = np.arange(-0.7, 0.71, 0.1)  # -1 to 1 in 0.1 steps
+    sigmoid_gamma_range = np.arange(0.0, 1.01, 0.1)  # 0 to 1 in 0.1 steps
+    private_morale_alpha_range = np.arange(0.5, 1.01, 0.1)  # 0 to 1 in 0.1 steps
     
     # Calculate total number of combinations
     total_combinations = (len(inflation_range) * len(belt_tightening_range) * 
@@ -95,11 +393,8 @@ def run_parameter_sweep():
                             'private_morale_alpha': private_morale_alpha,
                             'final_striking_workers': final_striking_workers,
                             'final_average_morale': final_average_morale,
-                            'total_days': len(sim_data['dates']),
                             'max_striking_workers': max(sim_data['striking_workers']) if sim_data['striking_workers'] else 0,
                             'min_striking_workers': min(sim_data['striking_workers']) if sim_data['striking_workers'] else 0,
-                            'final_employer_balance': sim_data['employer_balance'][-1] if sim_data['employer_balance'] else 0,
-                            'final_union_balance': sim_data['union_balance'][-1] if sim_data['union_balance'] else 0
                         }
                         
                         results.append(result)
@@ -215,98 +510,30 @@ def run_parameter_sweep():
     if len(valid_results) > 0:
         print(f"  - Correlations: {correlation_file}")
     
+    # Create visualizations
+    print("\nCreating visualizations...")
+    try:
+        create_heatmap_visualizations(results_df, output_dir)
+        print("  - Heatmap visualizations created")
+        
+        create_parameter_effect_plots(results_df, output_dir)
+        print("  - Parameter effect plots created")
+        
+        create_3d_visualizations(results_df, output_dir)
+        print("  - 3D visualizations created")
+        
+        create_summary_visualizations(results_df, output_dir)
+        print("  - Summary visualizations created")
+        
+        print(f"\nAll visualizations saved to: {output_dir}")
+        
+    except Exception as e:
+        print(f"Warning: Error creating visualizations: {e}")
+    
     return results_df, output_dir
-
-def create_visualization_script(results_df, output_dir):
-    """Create a script to visualize the parameter sweep results"""
-    
-    viz_script = os.path.join(output_dir, 'visualize_results.py')
-    
-    script_content = '''#!/usr/bin/env python3
-"""
-Visualization script for parameter sweep results.
-"""
-
-import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
-import numpy as np
-
-# Load results
-results_df = pd.read_csv('parameter_sweep_results.csv')
-
-# Filter out error runs
-valid_results = results_df[results_df['final_striking_workers'] >= 0]
-
-if len(valid_results) == 0:
-    print("No valid results to visualize")
-    exit()
-
-# Create visualizations
-fig, axes = plt.subplots(2, 2, figsize=(15, 12))
-
-# 1. Inflation vs Final Striking Workers
-axes[0, 0].scatter(valid_results['inflation'], valid_results['final_striking_workers'], alpha=0.6)
-axes[0, 0].set_xlabel('Inflation')
-axes[0, 0].set_ylabel('Final Striking Workers')
-axes[0, 0].set_title('Inflation vs Final Striking Workers')
-axes[0, 0].grid(True, alpha=0.3)
-
-# 2. Belt Tightening vs Final Striking Workers
-axes[0, 1].scatter(valid_results['belt_tightening'], valid_results['final_striking_workers'], alpha=0.6)
-axes[0, 1].set_xlabel('Belt Tightening')
-axes[0, 1].set_ylabel('Final Striking Workers')
-axes[0, 1].set_title('Belt Tightening vs Final Striking Workers')
-axes[0, 1].grid(True, alpha=0.3)
-
-# 3. Sigmoid Gamma vs Final Striking Workers
-axes[1, 0].scatter(valid_results['sigmoid_gamma'], valid_results['final_striking_workers'], alpha=0.6)
-axes[1, 0].set_xlabel('Sigmoid Gamma')
-axes[1, 0].set_ylabel('Final Striking Workers')
-axes[1, 0].set_title('Sigmoid Gamma vs Final Striking Workers')
-axes[1, 0].grid(True, alpha=0.3)
-
-# 4. Private Morale Alpha vs Final Striking Workers
-axes[1, 1].scatter(valid_results['private_morale_alpha'], valid_results['final_striking_workers'], alpha=0.6)
-axes[1, 1].set_xlabel('Private Morale Alpha')
-axes[1, 1].set_ylabel('Final Striking Workers')
-axes[1, 1].set_title('Private Morale Alpha vs Final Striking Workers')
-axes[1, 1].grid(True, alpha=0.3)
-
-plt.tight_layout()
-plt.savefig('parameter_sweep_scatter_plots.png', dpi=300, bbox_inches='tight')
-plt.show()
-
-# Create heatmap of correlations
-plt.figure(figsize=(10, 8))
-param_cols = ['inflation', 'belt_tightening', 'sigmoid_gamma', 'private_morale_alpha']
-metric_cols = ['final_striking_workers', 'final_average_morale']
-corr_data = valid_results[param_cols + metric_cols].corr()
-
-sns.heatmap(corr_data, annot=True, cmap='coolwarm', center=0, 
-            square=True, fmt='.3f')
-plt.title('Parameter Correlation Matrix')
-plt.tight_layout()
-plt.savefig('parameter_correlation_heatmap.png', dpi=300, bbox_inches='tight')
-plt.show()
-
-print("Visualizations saved as:")
-print("- parameter_sweep_scatter_plots.png")
-print("- parameter_correlation_heatmap.png")
-'''
-    
-    with open(viz_script, 'w') as f:
-        f.write(script_content)
-    
-    print(f"  - Visualization script: {viz_script}")
 
 if __name__ == "__main__":
     # Run the parameter sweep
-    results_df, output_dir = run_parameter_sweep()
-    
-    # Create visualization script
-    create_visualization_script(results_df, output_dir)
-    
-    print(f"\nTo visualize results, run:")
-    print(f"cd {output_dir}")
-    print(f"python visualize_results.py") 
+    results, output_directory = run_parameter_sweep()
+    print(f"\nParameter sweep completed successfully!")
+    print(f"Check the output directory '{output_directory}' for all results and visualizations.")
