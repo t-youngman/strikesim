@@ -55,7 +55,6 @@ union_network_file = None
 #morale parameters
 morale_specification = 'sigmoid'
 private_morale_alpha = 0.9
-social_morale_beta = 0.1
 
 #sigmoid morale parameters
 inflation = 0.10

@@ -55,7 +55,6 @@ union_network_file = None     # e.g., 'union_network' to load networks/unions/un
 
 #morale parameters
 morale_specification = 'sigmoid'  # 'sigmoid', 'linear'
-private_morale_alpha = 0.5
 social_morale_beta = 0.5  # More weight on social factors
 
 #sigmoid morale parameters

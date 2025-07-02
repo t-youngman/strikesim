@@ -1,4 +1,3 @@
-#dependencies
 import networkx as nx
 import pandas as pd
 import numpy as np
@@ -701,13 +700,12 @@ class StrikeSimulation:
         
         # Combine private and social morale (alpha and beta weights)
         alpha = self.settings.get('private_morale_alpha', 0.9)
-        beta = self.settings.get('social_morale_beta', 0.1)
         
         # If no social connections, rely more on private morale
         if social_morale == 0.0:
             alpha, beta = 0.95, 0.05  # Even more weight on private morale when no social influence
         
-        new_morale = (alpha * private_morale + beta * social_morale) / (alpha + beta)
+        new_morale = alpha * private_morale + (1-alpha) * social_morale
         
         worker.update_morale(new_morale)
         
@@ -1208,138 +1206,3 @@ class StrikeSimulation:
             plt.savefig(save_path, dpi=300, bbox_inches='tight')
         
         return fig
-    
-    def create_network_animation(self, save_path: str = 'network_animation.gif', 
-                                fps: int = 2, max_frames: int = None):
-        """Create an animated GIF showing network evolution over time"""
-        if not self.simulation_data['worker_states']:
-            print("No simulation data available for animation")
-            return None
-            
-        # Determine number of frames
-        total_frames = len(self.simulation_data['worker_states'])
-        if max_frames and max_frames < total_frames:
-            # Sample frames evenly
-            frame_indices = np.linspace(0, total_frames-1, max_frames, dtype=int)
-        else:
-            frame_indices = range(total_frames)
-        
-        images = []
-        
-        print(f"Creating animation with {len(frame_indices)} frames...")
-        
-        for i, timestep in enumerate(frame_indices):
-            print(f"Processing frame {i+1}/{len(frame_indices)} (day {timestep})")
-            
-            # Generate network visualization for this timestep
-            fig = self.visualize_networks_at_timestep(timestep)
-            if fig is None:
-                continue
-                
-            # Convert matplotlib figure to PIL Image
-            buf = io.BytesIO()
-            fig.savefig(buf, format='png', dpi=150, bbox_inches='tight')
-            buf.seek(0)
-            img = Image.open(buf)
-            images.append(img)
-            
-            # Close the figure to free memory
-            plt.close(fig)
-        
-        if not images:
-            print("No images generated for animation")
-            return None
-            
-        # Save as GIF
-        print(f"Saving animation to {save_path}...")
-        images[0].save(
-            save_path,
-            save_all=True,
-            append_images=images[1:],
-            duration=1000//fps,  # Duration in milliseconds
-            loop=0  # Loop indefinitely
-        )
-        
-        print(f"Animation saved successfully! {len(images)} frames at {fps} FPS")
-        return save_path
-
-# Standalone function to create animations from saved simulation data
-def create_animation_from_saved_data(hdf5_file: str, output_gif: str = 'network_animation.gif', 
-                                   fps: int = 2, max_frames: int = None):
-    """Create a network animation from saved simulation data"""
-    try:
-        # Load simulation data
-        with h5py.File(hdf5_file, 'r') as f:
-            # Create a minimal simulation object with loaded data
-            sim = StrikeSimulation({})
-            sim.simulation_data = {
-                'dates': [],
-                'striking_workers': [],
-                'working_workers': [],
-                'employer_balance': [],
-                'union_balance': [],
-                'average_morale': [],
-                'average_savings': [],
-                'worker_states': []
-            }
-            
-            # Load time series data
-            for key in sim.simulation_data.keys():
-                if key == 'dates':
-                    date_strings = f[f'time_series/{key}'][:]
-                    sim.simulation_data[key] = [datetime.fromisoformat(d.decode()) for d in date_strings]
-                else:
-                    sim.simulation_data[key] = list(f[f'time_series/{key}'][:])
-            
-            # Load networks (simplified - would need more complex loading for full functionality)
-            print("Note: Network animation from saved data may not show full network structure")
-            
-        # Create animation
-        return sim.create_network_animation(output_gif, fps, max_frames)
-        
-    except Exception as e:
-        print(f"Error creating animation from saved data: {e}")
-        return None
-
-if __name__ == "__main__":
-    # Example usage
-    print("StrikeSim Network Animation Tool")
-    print("Use the dashboard to create animations interactively, or call create_animation_from_saved_data()")
-    
-    # Test wage conversion
-    def test_wage_conversion():
-        """Test that annual wages are correctly converted to daily wages"""
-        print("\n=== Testing Wage Conversion ===")
-        
-        # Test settings with annual wages
-        test_settings = {
-            'initial_wage': 52000.0,  # Annual wage
-            'target_wage': 54600.0,   # Annual wage
-            'working_days': {'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'},
-            'start_date': '2025-01-01',
-            'duration': 10,
-            'num_workers': 5
-        }
-        
-        # Create simulation
-        sim = StrikeSimulation(test_settings)
-        sim.initialize_simulation()
-        
-        # Check that workers have correct daily wages
-        working_days_per_week = len(test_settings['working_days'])
-        expected_daily_initial = 52000.0 / (52 * working_days_per_week)
-        expected_daily_target = 54600.0 / (52 * working_days_per_week)
-        
-        print(f"Working days per week: {working_days_per_week}")
-        print(f"Expected daily initial wage: ${expected_daily_initial:.2f}")
-        print(f"Expected daily target wage: ${expected_daily_target:.2f}")
-        
-        for i, worker in enumerate(sim.workers):
-            print(f"Worker {i}: initial_wage=${worker.initial_wage:.2f}, target_wage=${worker.target_wage:.2f}")
-            assert abs(worker.initial_wage - expected_daily_initial) < 0.01, f"Worker {i} initial wage mismatch"
-            assert abs(worker.target_wage - expected_daily_target) < 0.01, f"Worker {i} target wage mismatch"
-        
-        print("✅ Wage conversion test passed!")
-    
-    # Run the test
-    test_wage_conversion()
