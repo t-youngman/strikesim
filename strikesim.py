@@ -78,18 +78,17 @@ class Worker:
         self.savings_history.append(current_total_savings)
 
 class Employer:
-    def __init__(self, initial_balance: float, revenue_markup: float = 1.5,
-                 concession_threshold: float = -10000.0, concession_policy: str = 'none'):
+    def __init__(self, initial_balance: float, revenue_markup: float = 1.5):
         self.balance = initial_balance
         self.revenue_markup = revenue_markup
-        self.concession_threshold = concession_threshold
-        self.concession_policy = concession_policy
-        self.retaliation_policy = 'none'
+        #self.concession_threshold = concession_threshold
+        #self.concession_policy = concession_policy
+        #self.retaliation_policy = 'none'
         self.daily_revenue = 0.0
         self.total_balance = initial_balance
         self.revenue_history = []
         self.balance_history = [initial_balance]
-        self.concessions_granted = 0.0
+        #self.concessions_granted = 0.0
         
     def calculate_daily_revenue(self, workers_working: int, daily_wage_cost: float):
         """Calculate daily revenue based on number of workers and markup"""
@@ -564,8 +563,8 @@ class StrikeSimulation:
         self.employer = Employer(
             initial_balance=initial_employer_balance,
             revenue_markup=self.settings.get('revenue_markup', 1.5),
-            concession_threshold=self.settings.get('concession_threshold', -10000.0),
-            concession_policy=self.settings.get('concession_policy', 'none')
+            #concession_threshold=self.settings.get('concession_threshold', -10000.0),
+            #concession_policy=self.settings.get('concession_policy', 'none')
         )
         
         # Create union
@@ -903,8 +902,8 @@ class StrikeSimulation:
         # Determine outcome
         if final_striking == 0:
             outcome = 'strike_collapsed'
-        elif self.employer.concessions_granted > 0:
-            outcome = 'employer_conceded'
+        #elif self.employer.concessions_granted > 0:
+        #    outcome = 'employer_conceded'
         else:
             outcome = 'ongoing'
         
@@ -918,7 +917,7 @@ class StrikeSimulation:
             'average_morale': [avg_morale],
             'average_savings': [avg_savings],
             'outcome': [outcome],
-            'total_concessions': [self.employer.concessions_granted],
+            #'total_concessions': [self.employer.concessions_granted],
             'total_strike_pay': [self.union.strike_pay_distributed],
             'total_dues_collected': [self.union.dues_collected],
             'total_expenditures': [sum(w.total_expenditures for w in self.workers)]
@@ -949,8 +948,8 @@ class StrikeSimulation:
             # Determine outcome
             if final_striking == 0:
                 outcome = 'strike_collapsed'
-            elif self.employer.concessions_granted > 0:
-                outcome = 'employer_conceded'
+            #elif self.employer.concessions_granted > 0:
+            #    outcome = 'employer_conceded'
             else:
                 outcome = 'ongoing'
             
@@ -963,7 +962,7 @@ class StrikeSimulation:
                 'average_morale': avg_morale,
                 'average_savings': avg_savings,
                 'outcome': outcome,
-                'total_concessions': self.employer.concessions_granted,
+                #'total_concessions': self.employer.concessions_granted,
                 'total_strike_pay': self.union.strike_pay_distributed,
                 'total_dues_collected': self.union.dues_collected
             })
@@ -1059,7 +1058,7 @@ class StrikeSimulation:
             'average_morale': np.mean(self.simulation_data['average_morale']),
             'morale_volatility': np.std(self.simulation_data['average_morale']),
             'average_savings': np.mean(self.simulation_data['average_savings']),
-            'total_concessions': self.employer.concessions_granted,
+            #'total_concessions': self.employer.concessions_granted,
             'total_strike_pay': self.union.strike_pay_distributed,
             'total_dues_collected': self.union.dues_collected,
             'total_expenditures': sum(w.total_expenditures for w in self.workers)
@@ -1068,8 +1067,8 @@ class StrikeSimulation:
         # Determine outcome
         if analysis['final_striking_workers'] == 0:
             analysis['outcome'] = 'strike_collapsed'
-        elif analysis['total_concessions'] > 0:
-            analysis['outcome'] = 'employer_conceded'
+        #elif analysis['total_concessions'] > 0:
+        #    analysis['outcome'] = 'employer_conceded'
         else:
             analysis['outcome'] = 'ongoing'
         
