@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import tempfile
 import os
 from strikesim import StrikeSimulation
-import settings
+import Emory_settings as settings
 import networkx as nx
 from datetime import datetime, timedelta
 
@@ -28,21 +28,18 @@ st.set_page_config(page_title="StrikeSim Dashboard", layout="wide")
 st.title("⚡⚡⚡    StrikeSim    ⚡⚡⚡")
 
 # --- Sidebar: Parameter Controls ---
-st.sidebar.header("Simulation Parameters")
+st.sidebar.header("Simulation settings")
 
 # --- Network Settings (Accordion) ---
-with st.sidebar.expander("🌐 Workplace Networks", expanded=False):
+with st.sidebar.expander("🌐 Employer", expanded=False):
     # Network selection
-    employer_network_options = ['random'] + list_network_files('networks/employers')
-    union_network_options = ['random'] + list_network_files('networks/unions')
+    employer_network_options = ['random grad union'] + list_network_files('networks/employers')
 
     employer_network_choice = st.selectbox("Employer network", employer_network_options, index=0)
-    union_network_choice = st.selectbox("Union network", union_network_options, index=0)
 
     # Employer network parameters (show only if random)
-    if employer_network_choice == 'random':
+    if employer_network_choice == 'random grad union':
         # University network parameters - only lab group and size parameters
-        st.markdown("**University Network Parameters:**")
         col1, col2 = st.columns(2)
         with col1:
             lab_size_n = st.slider("Lab size parameter n", 1, 10, settings.lab_size_n, 
@@ -68,7 +65,7 @@ with st.sidebar.expander("🌐 Workplace Networks", expanded=False):
             )
             
             # Display the calculated number of workers
-            st.info(f"📊 **Expected number of workers:** {expected_workers} (calculated from {num_departments} departments × ~{avg_department_size} people each)")
+            st.info(f"📊 **# workers:** {expected_workers}")
             num_workers = expected_workers
             
         except ImportError:
@@ -97,41 +94,31 @@ with st.sidebar.expander("🌐 Workplace Networks", expanded=False):
         num_departments = settings.num_departments
         avg_department_size = settings.avg_department_size
         # Hierarchical parameters not needed when loading from file
-
-    # Union network parameters (show only if random)
-    if union_network_choice == 'random':
-        bargaining_committee_size = st.slider("Union bargaining committee size", 1, 10, settings.bargaining_committee_size)
-        steward_percentage = st.slider("Union steward percentage", 0.01, 0.5, settings.steward_percentage, help="Fraction of workers who are union stewards (well-connected leaders)")
-        branch_connectedness = st.slider("Branch connectedness", 0.0, 1.0, settings.branch_connectedness, help="Probability of connecting to a regular member in the same branch")
-    else:
-        bargaining_committee_size = None
-        steward_percentage = None
-        branch_connectedness = None
+    initial_employer_balance = st.number_input("Initial employer balance", value=settings.initial_employer_balance)
+    #concession_threshold = st.number_input("Concession threshold", value=settings.concession_threshold)
 
 # --- Worker Settings (Accordion) ---
-with st.sidebar.expander("👥 Worker Settings", expanded=True):
-    # Worker parameters
-    initial_wage = st.number_input("Initial wage", value=settings.initial_wage, min_value=1.0)
-    target_wage = st.number_input("Target wage", value=settings.target_wage, min_value=1.0)
-    initial_savings_min, initial_savings_max = st.slider("Initial savings range", 0.0, 5000.0, settings.initial_savings_range)
+with st.sidebar.expander("👥 Workers", expanded=True):
+    # Worker parameters - Annual wage inputs
+    annual_initial_wage = st.number_input("Annual initial wage ($)", value=settings.initial_wage, min_value=1.0, help="Annual wage before any changes")
+    annual_target_wage = st.number_input("Annual target wage ($)", value=settings.target_wage, min_value=1.0, help="Annual wage workers are aiming for")
+    
+    # Use working days from settings initially (will be updated after calendar section)
+    working_days_per_week = len(settings.working_days)
+    daily_initial_wage = annual_initial_wage / (52 * working_days_per_week)
+    daily_target_wage = annual_target_wage / (52 * working_days_per_week)
+      
+    initial_savings_min, initial_savings_max = st.slider("Initial savings range", -5000.0, 15000.0, settings.initial_savings_range)
     initial_morale_min, initial_morale_max = st.slider("Initial morale range", 0.0, 1.0, settings.initial_morale_range)
 
-# --- Employer Settings (Accordion) ---
-with st.sidebar.expander("🏢 Employer Settings", expanded=False):
-    initial_employer_balance = st.number_input("Initial employer balance", value=settings.initial_employer_balance)
-    revenue_markup = st.number_input("Revenue markup", value=settings.revenue_markup, min_value=1.0, step=0.1)
-    concession_threshold = st.number_input("Concession threshold", value=settings.concession_threshold)
-
 # --- Union Settings (Accordion) ---
-with st.sidebar.expander("🤝 Union Settings", expanded=False):
+with st.sidebar.expander("🤝 Union", expanded=False):
     initial_strike_fund = st.number_input("Initial strike fund", value=settings.initial_strike_fund)
     strike_pay_rate = st.slider("Strike pay rate (fraction of wage)", 0.0, 1.0, settings.strike_pay_rate)
     dues_rate = st.slider("Union dues rate (fraction of wage)", 0.0, 0.2, settings.dues_rate)
-
-# --- Simulation Settings ---
-with st.sidebar.expander("⚙️ Simulation Settings", expanded=False):
-    morale_specification = st.selectbox("Morale specification", ["sigmoid", "linear", "no_motivation"], index=["sigmoid", "linear", "no_motivation"].index(settings.morale_specification))
-    duration = st.slider("Simulation duration (days)", 10, 365, settings.duration)
+    bargaining_committee_size = st.slider("Union bargaining committee size", 1, 20, settings.bargaining_committee_size)
+    steward_percentage = st.slider("Union steward percentage", 0.01, 0.5, settings.steward_percentage, help="Fraction of workers who are union stewards (well-connected leaders)")
+    branch_connectedness = st.slider("Branch connectedness", 0.0, 1.0, settings.branch_connectedness, help="Probability of connecting to a regular member in the same branch")
 
 # --- Calendar Settings (Accordion) ---
 with st.sidebar.expander("📅 Strike Calendar", expanded=False):
@@ -141,6 +128,8 @@ with st.sidebar.expander("📅 Strike Calendar", expanded=False):
         value=datetime.strptime(settings.start_date, '%Y-%m-%d').date(),
         help="Select the start date for the simulation"
     )
+
+    duration = st.slider("Simulation duration (days)", 10, 365, settings.duration)
     
     # Strike pattern selection
     strike_pattern = st.selectbox(
@@ -189,14 +178,25 @@ with st.sidebar.expander("📅 Strike Calendar", expanded=False):
     if not working_days:
         st.warning("Please select at least one working day!")
         working_days = {"Monday", "Tuesday", "Wednesday", "Thursday", "Friday"}
+    
+    # Recalculate daily wages based on updated working days
+    working_days_per_week = len(working_days)
+    daily_initial_wage = annual_initial_wage / (52 * working_days_per_week)
+    daily_target_wage = annual_target_wage / (52 * working_days_per_week)
+
+    
+# --- Model specification ---
+with st.sidebar.expander("⚙️ Model specification", expanded=False):
+    morale_specification = st.selectbox("Morale specification", ["sigmoid", "linear"], index=["sigmoid", "linear"].index(settings.morale_specification))
+
 
 # --- Run Simulation Button ---
 run_sim = st.sidebar.button("🚀 Run Simulation", type="primary")
 
 # --- Prepare settings dict ---
 settings_dict = dict(
-    initial_wage=initial_wage,
-    target_wage=target_wage,
+    initial_wage=daily_initial_wage,
+    target_wage=daily_target_wage,
     initial_savings_range=(initial_savings_min, initial_savings_max),
     initial_morale_range=(initial_morale_min, initial_morale_max),
     initial_employer_balance=initial_employer_balance,
@@ -207,8 +207,6 @@ settings_dict = dict(
     duration=duration,
     start_date=start_date.strftime('%Y-%m-%d'),
     working_days=working_days,
-    revenue_markup=revenue_markup,
-    concession_threshold=concession_threshold,
     concession_policy=settings.concession_policy,
     strike_pay_policy=settings.strike_pay_policy,
     # Strike pattern settings
@@ -231,18 +229,15 @@ if num_workers is not None:
     settings_dict['num_workers'] = num_workers
 
 # Set employer network file or parameters
-if employer_network_choice == 'random':
+if employer_network_choice == 'random grad union':
     settings_dict['employer_network_file'] = None
 else:
     settings_dict['employer_network_file'] = employer_network_choice
 
-if union_network_choice == 'random':
-    settings_dict['bargaining_committee_size'] = bargaining_committee_size
-    settings_dict['steward_percentage'] = steward_percentage
-    settings_dict['branch_connectedness'] = branch_connectedness
-    settings_dict['union_network_file'] = None
-else:
-    settings_dict['union_network_file'] = union_network_choice
+settings_dict['bargaining_committee_size'] = bargaining_committee_size
+settings_dict['steward_percentage'] = steward_percentage
+settings_dict['branch_connectedness'] = branch_connectedness
+settings_dict['union_network_file'] = None
 
 # --- Main Panel ---
 if run_sim:
@@ -328,6 +323,83 @@ if st.session_state.simulation_results is not None:
         **Note:** Orange dashed lines indicate scheduled strike days based on your selected pattern.
         """)
 
+    # --- Morale Factor Time Series Plots ---
+    st.subheader("📊 Morale Factor Analysis")
+    st.markdown("""
+    Analysis of the wage and savings factors that influence worker morale over time.
+    """)
+    
+    # Create calendar dates for x-axis (reuse from above)
+    calendar_dates = [start_date + timedelta(days=i) for i in range(len(results['striking_workers']))]
+    
+    # Average factors over time
+    fig_factors, axes_factors = plt.subplots(2, 2, figsize=(16, 12))
+    
+    # Average wage factor over time
+    axes_factors[0, 0].plot(calendar_dates, results['average_wage_factor'], color='blue', linewidth=2)
+    axes_factors[0, 0].set_title('Average Wage Factor in Morale Calculation')
+    axes_factors[0, 0].set_xlabel('Date')
+    axes_factors[0, 0].set_ylabel('Wage Factor')
+    axes_factors[0, 0].tick_params(axis='x', rotation=45)
+    axes_factors[0, 0].grid(True, alpha=0.3)
+    
+    # Average savings factor over time
+    axes_factors[0, 1].plot(calendar_dates, results['average_savings_factor'], color='green', linewidth=2)
+    axes_factors[0, 1].set_title('Average Savings Factor in Morale Calculation')
+    axes_factors[0, 1].set_xlabel('Date')
+    axes_factors[0, 1].set_ylabel('Savings Factor')
+    axes_factors[0, 1].tick_params(axis='x', rotation=45)
+    axes_factors[0, 1].grid(True, alpha=0.3)
+    
+    # Wage factors by deciles (heatmap)
+    if results['wage_factors_by_decile'] and len(results['wage_factors_by_decile']) > 0:
+        wage_decile_data = np.array(results['wage_factors_by_decile']).T
+        im1 = axes_factors[1, 0].imshow(wage_decile_data, aspect='auto', cmap='Blues', 
+                                       extent=[0, len(calendar_dates), 0, 10])
+        axes_factors[1, 0].set_title('Wage Factors by Morale Deciles')
+        axes_factors[1, 0].set_xlabel('Time (days)')
+        axes_factors[1, 0].set_ylabel('Morale Decile (1=lowest, 10=highest)')
+        plt.colorbar(im1, ax=axes_factors[1, 0], label='Wage Factor')
+        
+        # Set x-axis to show dates at intervals
+        if len(calendar_dates) > 10:
+            step = len(calendar_dates) // 10
+            tick_positions = list(range(0, len(calendar_dates), step))
+            tick_labels = [calendar_dates[i].strftime('%m-%d') for i in tick_positions]
+            axes_factors[1, 0].set_xticks(tick_positions)
+            axes_factors[1, 0].set_xticklabels(tick_labels, rotation=45)
+    
+    # Savings factors by deciles (heatmap)
+    if results['savings_factors_by_decile'] and len(results['savings_factors_by_decile']) > 0:
+        savings_decile_data = np.array(results['savings_factors_by_decile']).T
+        im2 = axes_factors[1, 1].imshow(savings_decile_data, aspect='auto', cmap='Greens', 
+                                       extent=[0, len(calendar_dates), 0, 10])
+        axes_factors[1, 1].set_title('Savings Factors by Morale Deciles')
+        axes_factors[1, 1].set_xlabel('Time (days)')
+        axes_factors[1, 1].set_ylabel('Morale Decile (1=lowest, 10=highest)')
+        plt.colorbar(im2, ax=axes_factors[1, 1], label='Savings Factor')
+        
+        # Set x-axis to show dates at intervals
+        if len(calendar_dates) > 10:
+            step = len(calendar_dates) // 10
+            tick_positions = list(range(0, len(calendar_dates), step))
+            tick_labels = [calendar_dates[i].strftime('%m-%d') for i in tick_positions]
+            axes_factors[1, 1].set_xticks(tick_positions)
+            axes_factors[1, 1].set_xticklabels(tick_labels, rotation=45)
+    
+    plt.tight_layout()
+    st.pyplot(fig_factors)
+    
+    # Add explanation of the factor analysis
+    st.markdown("""
+    **Morale Factor Analysis Guide:**
+    - **Wage Factor:** How much the gap between current and target wages affects morale (higher = more motivated by wage increases)
+    - **Savings Factor:** How much changes in financial position affect morale (higher = more motivated by financial security)
+    - **Decile Heatmaps:** Show how these factors vary across workers grouped by their morale levels
+    - **Decile 1:** Workers with lowest morale
+    - **Decile 10:** Workers with highest morale
+    """)
+
     # --- Network Statistics ---
     st.subheader("🌐 Network Statistics")
     st.markdown("""
@@ -399,105 +471,116 @@ if st.session_state.simulation_results is not None:
 
     # --- Network Visualizations ---
     st.subheader("🌐 Network Visualizations")
-    st.markdown("""
-    Visual representation of the employer and union networks at the first and last strike days.
-    Node colors indicate worker states: 🔴 Striking, 🔵 Working, 🟠 Union Committee, 🟢 Manager
-    """)
     
-    # Check if we have worker states data
-    if results['worker_states'] and len(results['worker_states']) > 0:
-        # Find first and last strike days
-        first_strike_day = None
-        last_strike_day = None
-        
-        # Calculate strike days and find first/last ones
-        strike_day_timesteps = []
-        if strike_pattern != 'indefinite':
-            current_date = start_date
-            for i, day in enumerate(range(len(results['worker_states']))):
-                if sim.is_strike_day(current_date):
-                    strike_day_timesteps.append(i)
-                current_date += timedelta(days=1)
-        else:
-            # For indefinite strikes, find days where there were actually striking workers
-            for i, striking_count in enumerate(results['striking_workers']):
-                if striking_count > 0:
-                    strike_day_timesteps.append(i)
-        
-        if strike_day_timesteps:
-            first_strike_day = strike_day_timesteps[0]
-            last_strike_day = strike_day_timesteps[-1]
-            
-            # First strike day visualization
-            first_strike_date = start_date + timedelta(days=first_strike_day)
-            st.markdown(f"### 📊 First Strike Day ({first_strike_date.strftime('%Y-%m-%d')})")
-            try:
-                fig_first = sim.visualize_networks_at_timestep(first_strike_day)
-                if fig_first:
-                    st.pyplot(fig_first)
-                    plt.close(fig_first)
-                else:
-                    st.warning("Could not generate first strike day visualization")
-            except Exception as e:
-                st.error(f"Error generating first strike day visualization: {e}")
-            
-            # Last strike day visualization (only if different from first)
-            if last_strike_day != first_strike_day:
-                last_strike_date = start_date + timedelta(days=last_strike_day)
-                st.markdown(f"### 📊 Last Strike Day ({last_strike_date.strftime('%Y-%m-%d')})")
-                try:
-                    fig_last = sim.visualize_networks_at_timestep(last_strike_day)
-                    if fig_last:
-                        st.pyplot(fig_last)
-                        plt.close(fig_last)
-                    else:
-                        st.warning("Could not generate last strike day visualization")
-                except Exception as e:
-                    st.error(f"Error generating last strike day visualization: {e}")
-            else:
-                st.info("Only one strike day occurred during the simulation.")
-        else:
-            # Fallback to first and last timesteps if no strike days found
-            st.warning("No strike days found. Showing first and last timesteps instead.")
-            first_timestep = 0
-            final_timestep = len(results['worker_states']) - 1
-            
-            # First timestep visualization
-            st.markdown("### 📊 First Timestep (Day 0)")
-            try:
-                fig_first = sim.visualize_networks_at_timestep(first_timestep)
-                if fig_first:
-                    st.pyplot(fig_first)
-                    plt.close(fig_first)
-                else:
-                    st.warning("Could not generate first timestep visualization")
-            except Exception as e:
-                st.error(f"Error generating first timestep visualization: {e}")
-            
-            # Final timestep visualization
-            st.markdown(f"### 📊 Final Timestep (Day {final_timestep})")
-            try:
-                fig_final = sim.visualize_networks_at_timestep(final_timestep)
-                if fig_final:
-                    st.pyplot(fig_final)
-                    plt.close(fig_final)
-                else:
-                    st.warning("Could not generate final timestep visualization")
-            except Exception as e:
-                st.error(f"Error generating final timestep visualization: {e}")
-        
-        # Add explanation of the visualizations
+    # Toggle for network visualization
+    show_network_viz = st.checkbox(
+        "Show Network Visualizations", 
+        value=False, 
+        help="Toggle to show/hide network visualizations (can be slow for large networks)"
+    )
+    
+    if show_network_viz:
         st.markdown("""
-        **Network Visualization Guide:**
-        - **Left panel (Union Network):** Shows union membership and committee structure
-        - **Right panel (Employer Network):** Shows organizational hierarchy and reporting relationships
-        - **Node sizes:** Managers are slightly larger than regular workers
-        - **Node colors:** Red = Striking, Blue = Working, Orange = Union Committee
-        - **Edges:** Represent social/organizational connections that influence morale spread
+        Visual representation of the employer and union networks at the first and last strike days.
+        Node colors indicate worker states: 🔴 Striking, 🔵 Working, 🟠 Union Committee, 🟢 Manager
         """)
         
+        # Check if we have worker states data
+        if results['worker_states'] and len(results['worker_states']) > 0:
+            # Find first and last strike days
+            first_strike_day = None
+            last_strike_day = None
+            
+            # Calculate strike days and find first/last ones
+            strike_day_timesteps = []
+            if strike_pattern != 'indefinite':
+                current_date = start_date
+                for i, day in enumerate(range(len(results['worker_states']))):
+                    if sim.is_strike_day(current_date):
+                        strike_day_timesteps.append(i)
+                    current_date += timedelta(days=1)
+            else:
+                # For indefinite strikes, find days where there were actually striking workers
+                for i, striking_count in enumerate(results['striking_workers']):
+                    if striking_count > 0:
+                        strike_day_timesteps.append(i)
+            
+            if strike_day_timesteps:
+                first_strike_day = strike_day_timesteps[0]
+                last_strike_day = strike_day_timesteps[-1]
+                
+                # First strike day visualization
+                first_strike_date = start_date + timedelta(days=first_strike_day)
+                st.markdown(f"### 📊 First Strike Day ({first_strike_date.strftime('%Y-%m-%d')})")
+                try:
+                    fig_first = sim.visualize_networks_at_timestep(first_strike_day)
+                    if fig_first:
+                        st.pyplot(fig_first)
+                        plt.close(fig_first)
+                    else:
+                        st.warning("Could not generate first strike day visualization")
+                except Exception as e:
+                    st.error(f"Error generating first strike day visualization: {e}")
+                
+                # Last strike day visualization (only if different from first)
+                if last_strike_day != first_strike_day:
+                    last_strike_date = start_date + timedelta(days=last_strike_day)
+                    st.markdown(f"### 📊 Last Strike Day ({last_strike_date.strftime('%Y-%m-%d')})")
+                    try:
+                        fig_last = sim.visualize_networks_at_timestep(last_strike_day)
+                        if fig_last:
+                            st.pyplot(fig_last)
+                            plt.close(fig_last)
+                        else:
+                            st.warning("Could not generate last strike day visualization")
+                    except Exception as e:
+                        st.error(f"Error generating last strike day visualization: {e}")
+                else:
+                    st.info("Only one strike day occurred during the simulation.")
+            else:
+                # Fallback to first and last timesteps if no strike days found
+                st.warning("No strike days found. Showing first and last timesteps instead.")
+                first_timestep = 0
+                final_timestep = len(results['worker_states']) - 1
+                
+                # First timestep visualization
+                st.markdown("### 📊 First Timestep (Day 0)")
+                try:
+                    fig_first = sim.visualize_networks_at_timestep(first_timestep)
+                    if fig_first:
+                        st.pyplot(fig_first)
+                        plt.close(fig_first)
+                    else:
+                        st.warning("Could not generate first timestep visualization")
+                except Exception as e:
+                    st.error(f"Error generating first timestep visualization: {e}")
+                
+                # Final timestep visualization
+                st.markdown(f"### 📊 Final Timestep (Day {final_timestep})")
+                try:
+                    fig_final = sim.visualize_networks_at_timestep(final_timestep)
+                    if fig_final:
+                        st.pyplot(fig_final)
+                        plt.close(fig_final)
+                    else:
+                        st.warning("Could not generate final timestep visualization")
+                except Exception as e:
+                    st.error(f"Error generating final timestep visualization: {e}")
+            
+            # Add explanation of the visualizations
+            st.markdown("""
+            **Network Visualization Guide:**
+            - **Left panel (Union Network):** Shows union membership and committee structure
+            - **Right panel (Employer Network):** Shows organizational hierarchy and reporting relationships
+            - **Node sizes:** Managers are slightly larger than regular workers
+            - **Node colors:** Red = Striking, Blue = Working, Orange = Union Committee
+            - **Edges:** Represent social/organizational connections that influence morale spread
+            """)
+            
+        else:
+            st.warning("No worker state data available for network visualization")
     else:
-        st.warning("No worker state data available for network visualization")
+        st.info("Network visualizations are disabled. Check the box above to enable them.")
 
     # --- Download Results ---
     st.subheader("📥 Download Results")
@@ -537,7 +620,6 @@ weekly_escalation_start = {get_val('weekly_escalation_start')}
 #employer policy
 concession_policy = '{settings.concession_policy}'
 retaliation_policy = '{settings.retaliation_policy}'
-revenue_markup = {revenue_markup}
 concession_threshold = {concession_threshold}
 
 #union policy
@@ -547,8 +629,8 @@ dues_rate = {dues_rate}
 
 #worker parameters
 num_workers = {get_val('num_workers')}
-initial_wage = {initial_wage}
-target_wage = {target_wage}
+initial_wage = {daily_initial_wage}  # Daily wage (calculated from monthly)
+target_wage = {daily_target_wage}  # Daily wage (calculated from monthly)
 initial_savings_range = {get_val('initial_savings_range')}
 initial_morale_range = {get_val('initial_morale_range')}
 daily_expenditure_rate = {settings.daily_expenditure_rate}
@@ -574,8 +656,7 @@ steward_percentage = {get_val('steward_percentage')}
 branch_connectedness = {get_val('branch_connectedness')}
 
 #network file loading
-employer_network_file = {repr(employer_network_choice if employer_network_choice != 'random' else None)}
-union_network_file = {repr(union_network_choice if union_network_choice != 'random' else None)}
+employer_network_file = {repr(employer_network_choice if employer_network_choice != 'random grad union' else None)}
 
 #morale parameters
 morale_specification = '{morale_specification}'
@@ -592,11 +673,6 @@ linear_alpha = {settings.linear_alpha}
 linear_beta = {settings.linear_beta}
 linear_gamma = {settings.linear_gamma}
 linear_phi = {settings.linear_phi}
-
-#no_motivation morale parameters
-no_motivation_alpha = {settings.no_motivation_alpha}
-no_motivation_beta = {settings.no_motivation_beta}
-no_motivation_gamma = {settings.no_motivation_gamma}
 
 #participation parameters
 participation_threshold = {settings.participation_threshold}

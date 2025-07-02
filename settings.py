@@ -54,7 +54,7 @@ employer_network_file = None  # e.g., 'defra' to load networks/employers/defra.g
 union_network_file = None     # e.g., 'union_network' to load networks/unions/union_network.gexf
 
 #morale parameters
-morale_specification = 'sigmoid'  # 'sigmoid', 'linear', 'no_motivation'
+morale_specification = 'sigmoid'  # 'sigmoid', 'linear'
 private_morale_alpha = 0.5
 social_morale_beta = 0.5  # More weight on social factors
 
@@ -68,11 +68,6 @@ linear_alpha = 0.3
 linear_beta = 0.3
 linear_gamma = 0.4
 linear_phi = 0.3
-
-#no_motivation morale parameters
-no_motivation_alpha = 0.5
-no_motivation_beta = 0.3
-no_motivation_gamma = 0.2
 
 #participation parameters
 participation_threshold = 0.5  # Lower threshold

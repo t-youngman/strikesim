@@ -13,31 +13,32 @@ import glob
 from PIL import Image
 import io
 
-
-#import union and employer data, use defaults if no data provided
-
-
-
-#generate random graphs for union and employer using the data
-
-
-
-#specify worker agents, employer agent and union agent
 class Worker:
     def __init__(self, id: int, initial_wage: float, target_wage: float, 
                  initial_savings: float = 0.0, initial_morale: float = 0.5):
+        """
+        Initialize a worker agent.
+        
+        Args:
+            id: Worker ID
+            initial_wage: Daily wage (converted from annual wage in simulation)
+            target_wage: Daily target wage (converted from annual target wage in simulation)
+            initial_savings: Initial savings amount
+            initial_morale: Initial morale level (0-1)
+        """
         self.id = id
         self.state = 'not_striking'  # 'striking', 'not_striking', 'non_member'
         self.current_wage = initial_wage
         self.initial_wage = initial_wage
         self.target_wage = target_wage
-        self.savings = initial_savings
+        self.initial_savings = initial_savings
         self.union_dues = 0.0
         self.participation_history = []  # List of daily participation decisions
         self.morale = initial_morale
         self.morale_history = [initial_morale]
-        self.net_earnings = 0.0  # Cumulative earnings/losses during simulation
+        self.net_earnings = initial_savings  # Cumulative earnings/losses during simulation
         self.total_expenditures = 0.0  # Track total expenditures
+        self.savings_history = [initial_savings]  # Track savings over time
         
     def update_morale(self, new_morale: float):
         """Update worker's morale and add to history"""
@@ -53,20 +54,29 @@ class Worker:
     def receive_wage(self, amount: float):
         """Receive wage payment"""
         self.net_earnings += amount
+        self.update_savings_history()
         
     def receive_strike_pay(self, amount: float):
         """Receive strike pay"""
         self.net_earnings += amount
+        self.update_savings_history()
         
     def pay_union_dues(self, amount: float):
         """Pay union dues"""
         self.union_dues += amount
         self.net_earnings -= amount
+        self.update_savings_history()
         
     def pay_daily_expenses(self, amount: float):
         """Pay daily living expenses"""
         self.net_earnings -= amount
         self.total_expenditures += amount
+        self.update_savings_history()
+        
+    def update_savings_history(self):
+        """Update the savings history with current total savings"""
+        current_total_savings = self.net_earnings
+        self.savings_history.append(current_total_savings)
 
 class Employer:
     def __init__(self, initial_balance: float, revenue_markup: float = 1.5,
@@ -144,52 +154,6 @@ class Union:
         if policy_name in self.network_policies:
             self.network_policies[policy_name] = value
 
-
-#calendar initialisation
-
-#start date
-#working days
-
-
-#read in initial conditions from settings.py
-
-
-
-#initialise agents
-##workers daily morale interactions
-
-
-
-##employer daily balance interactions
-
-
-
-##union daily balance interactions
-
-
-#method to save full time series data for every agent as .h5
-
-
-
-#method to save summary statistics as .csv
-
-
-#method to run Monte Carlo simulation with different random networks
-
-
-
-#method to save summary statistics from Monte Carlo simulation as .csv
-
-
-
-#method to visualise the networks
-
-
-#method to visualise the time series data
-
-
-#methods to analyse the time series data
-
 class StrikeSimulation:
     def __init__(self, settings: Dict):
         self.settings = settings
@@ -217,7 +181,11 @@ class StrikeSimulation:
             'union_balance': [],
             'average_morale': [],
             'average_savings': [],
-            'worker_states': []  # Track each worker's state at each timestep
+            'worker_states': [],  # Track each worker's state at each timestep
+            'average_wage_factor': [],  # Track average wage factor in morale calculation
+            'average_savings_factor': [],  # Track average savings factor in morale calculation
+            'wage_factors_by_decile': [],  # Track wage factors by deciles
+            'savings_factors_by_decile': []  # Track savings factors by deciles
         }
         
     def generate_employer_network(self, num_workers: int = None, 
@@ -490,16 +458,31 @@ class StrikeSimulation:
         return next_date
     
     def initialize_simulation(self, num_workers: int = 50, 
-                            initial_wage: float = 100.0,
-                            target_wage: float = 105.0,
+                            initial_wage: float = 52000.0,  # Annual wage (52 weeks * 5 days * $200/day)
+                            target_wage: float = 54600.0,   # Annual wage (52 weeks * 5 days * $210/day)
                             initial_employer_balance: float = 100000.0,
                             initial_strike_fund: float = 50000.0):
-        """Initialize the simulation with workers, employer, and union"""
+        """Initialize the simulation with workers, employer, and union
+        
+        Note: initial_wage and target_wage are interpreted as annual wages and converted to daily wages
+        using the formula: daily_wage = annual_wage / (52 * working_days_per_week)
+        """
         
         # Use settings if provided, otherwise use defaults
         participation_threshold = self.settings.get('participation_threshold', 0.5)
-        initial_wage = self.settings.get('initial_wage', initial_wage)
-        target_wage = self.settings.get('target_wage', target_wage)
+        
+        # Interpret wages as annual wages and convert to daily wages
+        # Use the same calculation method as the dashboard
+        annual_initial_wage = self.settings.get('initial_wage', initial_wage)
+        annual_target_wage = self.settings.get('target_wage', target_wage)
+        
+        # Calculate working days per week from settings
+        working_days_per_week = len(self.settings.get('working_days', {'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'}))
+        
+        # Convert annual wages to daily wages using the same formula as dashboard
+        daily_initial_wage = annual_initial_wage / (52 * working_days_per_week)
+        daily_target_wage = annual_target_wage / (52 * working_days_per_week)
+        
         initial_employer_balance = self.settings.get('initial_employer_balance', initial_employer_balance)
         initial_strike_fund = self.settings.get('initial_strike_fund', initial_strike_fund)
         initial_morale_range = self.settings.get('initial_morale_range', (0.5, 0.8))
@@ -571,8 +554,8 @@ class StrikeSimulation:
         for i in range(num_workers):
             worker = Worker(
                 id=i,
-                initial_wage=initial_wage,
-                target_wage=target_wage,
+                initial_wage=daily_initial_wage,  # Use calculated daily wage
+                target_wage=daily_target_wage,    # Use calculated daily wage
                 initial_savings=random.uniform(*initial_savings_range),
                 initial_morale=random.uniform(*initial_morale_range)
             )
@@ -601,39 +584,53 @@ class StrikeSimulation:
             else:
                 worker.state = 'not_striking'
 
-    def calculate_private_morale(self, worker: Worker, morale_spec: str = 'sigmoid') -> float:
+    def calculate_private_morale(self, worker: Worker, morale_spec: str = 'sigmoid') -> tuple:
         """Calculate worker's private morale based on financial position and target wage"""
         wage_gap = (worker.target_wage - worker.current_wage) / worker.current_wage
-        savings_change = (worker.net_earnings - worker.savings) / (worker.initial_wage * max(self.day_count, 1))
+        
+        # Calculate current total savings
+        current_total_savings = worker.net_earnings
+        
+        # Calculate average daily depletion rate relative to wages
+        # This represents how much of their daily wage they're losing on average
+        if self.day_count > 0:
+            # Daily depletion = (initial savings - current savings) / days elapsed
+            # Normalized by daily wage to get depletion as fraction of wage
+            daily_depletion = (worker.initial_savings - current_total_savings) / (self.day_count * worker.initial_wage)
+        else:
+            daily_depletion = 0.0
+        
+        # Alternative: Calculate depletion rate over a rolling window
+        # This could be more responsive to recent changes
+        #daily_depletion = self.calculate_rolling_depletion_rate(worker, window_size=7)
         
         if morale_spec == 'sigmoid':
             # Sigmoid specification 
             def calibrate_sigmoid(reference, target):
                 return -(1/reference)*np.log((1-target)/target)
-            alpha = calibrate_sigmoid(self.settings.get('inflation', 0.05), 0.6)
-            beta = calibrate_sigmoid(self.settings.get('belt_tightening', -0.2),0.4)
+            alpha = calibrate_sigmoid(self.settings.get('inflation', 0.05), 0.8)
+            beta = calibrate_sigmoid(self.settings.get('belt_tightening', -0.2),0.2)
             gamma = self.settings.get('sigmoid_gamma', 1)
             # Factors
             wage_factor = 1 / (1 + np.exp(-wage_gap * alpha))  # Positive wage gap increases morale
-            savings_factor = 1 / (1 + np.exp(-savings_change * beta))  # Positive savings change increases morale
+            savings_factor = 1 / (1 + np.exp(-daily_depletion * beta))  # Lower depletion increases morale
             
             # Combine factors - ensure result is between 0 and 1
             combined_morale = gamma*worker.morale + (1-gamma)*(wage_factor + savings_factor)/2
-            return max(0.0, min(1.0, combined_morale))
+            return max(0.0, min(1.0, combined_morale)), wage_factor, savings_factor
             
         elif morale_spec == 'linear':
             # Linear specification
-            phi = self.settings.get('linear_phi', 0.3)
-            alpha, beta, gamma = self.settings.get('linear_alpha', 0.3), self.settings.get('linear_beta', 0.3), self.settings.get('linear_gamma', 0.4)
-            linear_morale = alpha * wage_gap + beta * savings_change + gamma * worker.morale
-            return 1 / (1 + np.exp(-phi * linear_morale))
+            alpha, beta, gamma, phi = self.settings.get('linear_alpha', 0.3), self.settings.get('linear_beta', 0.3), self.settings.get('linear_gamma', 0.4), self.settings.get('linear_phi', 0.3)
+            linear_morale = alpha * wage_gap + beta * daily_depletion + gamma * worker.morale
+            # For linear specification, use the components as factors
+            wage_factor = alpha * wage_gap
+            savings_factor = beta * daily_depletion
+
+            # Combine factors - ensure result is between 0 and 1
+            return gamma*worker.morale + (1-gamma)*(1 / (1 + np.exp(-phi * linear_morale))), wage_factor, savings_factor
             
-        else:  # 'no_motivation'
-            # No motivation specification
-            alpha, beta, gamma = self.settings.get('no_motivation_alpha', 0.5), self.settings.get('no_motivation_beta', 0.3), self.settings.get('no_motivation_gamma', 0.2)
-            no_motivation_morale = alpha * wage_gap * (beta * worker.morale + gamma * savings_change)
-            return max(0.0, min(1.0, no_motivation_morale))
-    
+   
     def calculate_social_morale(self, worker: Worker) -> float:
         """Calculate social morale based on network interactions with strike day logic"""
         # Check if this is a strike day
@@ -699,7 +696,7 @@ class StrikeSimulation:
         if morale_spec is None:
             morale_spec = self.settings.get('morale_specification', 'sigmoid')
             
-        private_morale = self.calculate_private_morale(worker, morale_spec)
+        private_morale, wage_factor, savings_factor = self.calculate_private_morale(worker, morale_spec)
         social_morale = self.calculate_social_morale(worker)
         
         # Combine private and social morale (alpha and beta weights)
@@ -712,16 +709,11 @@ class StrikeSimulation:
         
         new_morale = (alpha * private_morale + beta * social_morale) / (alpha + beta)
         
-        # Ensure morale doesn't change too drastically in one step
-        max_change = 0.1  # Maximum 10% change per day
-        current_morale = worker.morale
-        if abs(new_morale - current_morale) > max_change:
-            if new_morale > current_morale:
-                new_morale = current_morale + max_change
-            else:
-                new_morale = current_morale - max_change
-        
         worker.update_morale(new_morale)
+        
+        # Store factors for tracking
+        worker.wage_factor = wage_factor
+        worker.savings_factor = savings_factor
     
     def process_daily_financial_flows(self):
         """Process daily financial transactions"""
@@ -794,7 +786,38 @@ class StrikeSimulation:
         striking_count = sum(1 for w in self.workers if w.state == 'striking')
         working_count = sum(1 for w in self.workers if w.state == 'not_striking')
         avg_morale = np.mean([w.morale for w in self.workers])
-        avg_savings = np.mean([w.savings + w.net_earnings for w in self.workers])
+        avg_savings = np.mean([w.net_earnings for w in self.workers])
+        
+        # Calculate average factors
+        avg_wage_factor = np.mean([getattr(w, 'wage_factor', 0.0) for w in self.workers])
+        avg_savings_factor = np.mean([getattr(w, 'savings_factor', 0.0) for w in self.workers])
+        
+        # Calculate factors by deciles
+        wage_factors = [getattr(w, 'wage_factor', 0.0) for w in self.workers]
+        savings_factors = [getattr(w, 'savings_factor', 0.0) for w in self.workers]
+        
+        # Sort workers by their current morale for decile calculation
+        worker_morales = [(i, w.morale) for i, w in enumerate(self.workers)]
+        worker_morales.sort(key=lambda x: x[1])  # Sort by morale
+        
+        # Calculate deciles
+        num_workers = len(self.workers)
+        decile_size = max(1, num_workers // 10)
+        wage_factors_by_decile = []
+        savings_factors_by_decile = []
+        
+        for decile in range(10):
+            start_idx = decile * decile_size
+            end_idx = min((decile + 1) * decile_size, num_workers)
+            if start_idx < num_workers:
+                decile_worker_indices = [worker_morales[i][0] for i in range(start_idx, end_idx)]
+                decile_wage_factors = [wage_factors[i] for i in decile_worker_indices]
+                decile_savings_factors = [savings_factors[i] for i in decile_worker_indices]
+                wage_factors_by_decile.append(np.mean(decile_wage_factors))
+                savings_factors_by_decile.append(np.mean(decile_savings_factors))
+            else:
+                wage_factors_by_decile.append(0.0)
+                savings_factors_by_decile.append(0.0)
         
         self.simulation_data['dates'].append(self.current_date)
         self.simulation_data['striking_workers'].append(striking_count)
@@ -804,6 +827,10 @@ class StrikeSimulation:
         self.simulation_data['average_morale'].append(avg_morale)
         self.simulation_data['average_savings'].append(avg_savings)
         self.simulation_data['worker_states'].append([w.state for w in self.workers])
+        self.simulation_data['average_wage_factor'].append(avg_wage_factor)
+        self.simulation_data['average_savings_factor'].append(avg_savings_factor)
+        self.simulation_data['wage_factors_by_decile'].append(wage_factors_by_decile)
+        self.simulation_data['savings_factors_by_decile'].append(savings_factors_by_decile)
         
         # Monthly review
         if self.day_count % 20 == 0:  # Monthly review
@@ -1278,3 +1305,41 @@ if __name__ == "__main__":
     # Example usage
     print("StrikeSim Network Animation Tool")
     print("Use the dashboard to create animations interactively, or call create_animation_from_saved_data()")
+    
+    # Test wage conversion
+    def test_wage_conversion():
+        """Test that annual wages are correctly converted to daily wages"""
+        print("\n=== Testing Wage Conversion ===")
+        
+        # Test settings with annual wages
+        test_settings = {
+            'initial_wage': 52000.0,  # Annual wage
+            'target_wage': 54600.0,   # Annual wage
+            'working_days': {'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday'},
+            'start_date': '2025-01-01',
+            'duration': 10,
+            'num_workers': 5
+        }
+        
+        # Create simulation
+        sim = StrikeSimulation(test_settings)
+        sim.initialize_simulation()
+        
+        # Check that workers have correct daily wages
+        working_days_per_week = len(test_settings['working_days'])
+        expected_daily_initial = 52000.0 / (52 * working_days_per_week)
+        expected_daily_target = 54600.0 / (52 * working_days_per_week)
+        
+        print(f"Working days per week: {working_days_per_week}")
+        print(f"Expected daily initial wage: ${expected_daily_initial:.2f}")
+        print(f"Expected daily target wage: ${expected_daily_target:.2f}")
+        
+        for i, worker in enumerate(sim.workers):
+            print(f"Worker {i}: initial_wage=${worker.initial_wage:.2f}, target_wage=${worker.target_wage:.2f}")
+            assert abs(worker.initial_wage - expected_daily_initial) < 0.01, f"Worker {i} initial wage mismatch"
+            assert abs(worker.target_wage - expected_daily_target) < 0.01, f"Worker {i} target wage mismatch"
+        
+        print("✅ Wage conversion test passed!")
+    
+    # Run the test
+    test_wage_conversion()
